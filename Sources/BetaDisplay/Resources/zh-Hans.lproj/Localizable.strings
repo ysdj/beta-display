@@ -1,0 +1,241 @@
+/* 应用 */
+"app.self_test_failed" = "Beta Display 自检失败";
+"app.quit" = "退出 Beta Display";
+"app.refresh_displays" = "重新扫描显示器";
+
+/* 导航 */
+"nav.general" = "常规设置";
+"nav.displays" = "显示器";
+"nav.groups" = "显示器群组";
+"nav.layout" = "布局与模式";
+"nav.image" = "图像调整";
+"nav.diagnostics" = "诊断";
+"nav.about" = "关于";
+"header.target_display" = "目标显示器";
+
+/* 常规 */
+"general.title" = "常规";
+"general.language" = "语言";
+"general.language.automatic" = "自动（跟随系统）";
+"general.language.english" = "English";
+"general.language.simplified_chinese" = "简体中文";
+"general.show_menu_icon" = "在菜单栏显示 Beta Display";
+"general.launch_at_login" = "登录时启动 Beta Display";
+"general.refresh_login_status" = "刷新登录项";
+"general.restore_defaults" = "恢复默认设置";
+"general.menu_hidden_hint" = "隐藏后仍可从程序坞打开 Beta Display。";
+
+/* 关于 */
+"about.title" = "关于 Beta Display";
+"about.version" = "版本 %@";
+"about.check_updates" = "检查更新";
+"about.checking" = "正在检查…";
+"about.up_to_date" = "当前已是最新版本。";
+"about.update_available" = "发现版本 %@。";
+"about.open_release" = "打开发布页面";
+"about.no_public_release" = "暂未提供公开发布版本。";
+"about.check_failed" = "无法检查更新。";
+
+/* 显示器 */
+"display.current" = "当前显示器";
+"display.name" = "名称";
+"display.status" = "状态";
+"display.pixels" = "屏幕像素";
+"display.physical_size" = "物理尺寸";
+"display.gamma_capacity" = "色表容量";
+"display.hardware_brightness" = "硬件亮度";
+"display.connected_extended" = "已连接，扩展显示";
+"display.mirroring" = "正在镜像";
+"display.built_in" = "内建";
+"display.external" = "外接";
+"display.built_in_display" = "内建显示屏";
+"display.external_display" = "外接显示器";
+"display.sample_points" = "%d 个采样点";
+"display.system_hardware_brightness" = "系统硬件亮度：%d%%";
+"display.hardware_brightness_unavailable" = "当前显示器未报告可用的系统硬件亮度控制。";
+
+/* 群组 */
+"groups.title" = "显示器群组";
+"groups.current" = "当前群组";
+"groups.none" = "尚无群组";
+"groups.create" = "新建群组…";
+"groups.delete" = "删除群组";
+"groups.sync_adjustments" = "同步图像调整";
+"groups.new_alert_title" = "新建显示器群组";
+"groups.new_alert_body" = "群组成员将同步图像调整。";
+"groups.default_name" = "新群组";
+"action.create" = "创建";
+"action.cancel" = "取消";
+"action.reset_default" = "重置为默认值";
+"action.reset_adjustment" = "将%@重置为默认值";
+
+/* 布局和模式 */
+"modes.title" = "显示模式与缩放";
+"modes.available" = "可用模式";
+"modes.refresh" = "重新读取模式";
+"modes.hidpi" = "HiDPI";
+"modes.low_resolution" = "低分辨率";
+"layout.title" = "显示器布局与镜像";
+"layout.mirror_to" = "镜像到";
+"layout.no_mirroring" = "不镜像";
+"layout.position" = "位置";
+"layout.horizontal" = "水平位置";
+"layout.vertical" = "垂直位置";
+
+/* 图像调整 */
+"image.title" = "图像调整";
+"image.contrast" = "对比度";
+"image.gamma" = "伽马";
+"image.gain" = "增益";
+"image.temperature" = "色温";
+"image.software_brightness" = "软件亮度";
+"image.quantization" = "量化";
+"image.quantization_off" = "关闭";
+"image.quantization_levels" = "%d 级";
+"image.rgb_channels" = "RGB 通道";
+"image.gamma_red" = "伽马（红）";
+"image.gamma_green" = "伽马（绿）";
+"image.gamma_blue" = "伽马（蓝）";
+"image.gain_red" = "增益（红）";
+"image.gain_green" = "增益（绿）";
+"image.gain_blue" = "增益（蓝）";
+"profile.title" = "颜色描述文件";
+"profile.current" = "当前描述文件";
+"profile.restore_factory" = "恢复出厂描述文件";
+"profile.refresh" = "重新读取描述文件";
+"profile.current_suffix" = "%@（当前）";
+"system_modes.title" = "系统色彩模式";
+"system_modes.night_shift" = "夜览";
+"system_modes.night_shift_strength" = "暖色强度";
+"system_modes.true_tone" = "原彩";
+"system_modes.synced" = "已与 macOS 系统同步";
+"system_modes.status_separator" = "；";
+"system_modes.night_shift_unavailable" = "夜览不可用";
+"system_modes.true_tone_unavailable" = "原彩不可用";
+"system_modes.night_shift_set_failed" = "无法设置夜览";
+"system_modes.night_shift_strength_failed" = "无法设置夜览暖色强度";
+"system_modes.true_tone_set_failed" = "无法设置原彩";
+"framebuffer.title" = "帧缓冲色彩模式";
+"framebuffer.mode" = "帧缓冲模式";
+"framebuffer.auto_dither" = "反色或灰度模式时自动启用 GPU 抖动";
+"framebuffer.auto_dither_tooltip" = "仅在当前显示器公开 GPU 抖动属性时可用。";
+"framebuffer.refresh" = "重新读取状态";
+"framebuffer.restore_startup" = "恢复启动时状态";
+"framebuffer.tools" = "GPU 帧缓冲工具";
+"framebuffer.enable_dithering" = "启用 GPU 抖动";
+"framebuffer.enable_uniformity" = "启用 GPU 均一性校正";
+"framebuffer.standard" = "标准帧缓冲";
+"framebuffer.inverted" = "反色帧缓冲";
+"framebuffer.grayscale" = "灰度帧缓冲";
+"framebuffer.inverted_grayscale" = "反色灰度帧缓冲";
+"recovery.title" = "重置";
+"recovery.reset" = "重置当前调整";
+
+/* 诊断 */
+"diagnostics.title" = "显示器诊断";
+"diagnostics.copy" = "复制诊断信息";
+"diagnostics.name" = "名称：%@";
+"diagnostics.id" = "显示器 ID：%@";
+"diagnostics.type" = "类型：%@";
+"diagnostics.vendor" = "厂商 / 型号 / 序列号：%@ / %@ / %@";
+"diagnostics.pixels" = "像素尺寸：%d × %d";
+"diagnostics.physical" = "物理尺寸：%d × %d mm";
+"diagnostics.mode" = "当前模式：%@";
+"diagnostics.gamma" = "色表容量：%d";
+"diagnostics.edid" = "EDID：%@";
+"diagnostics.unsupported_title" = "不可用的控制项";
+"framebuffer.tools_status" = "GPU 抖动：%@；均一性校正：%@";
+"framebuffer.exposed" = "未公开";
+
+/* 控制器状态 */
+"status.ready" = "就绪";
+"status.no_active_displays" = "未找到活动显示器";
+"status.cannot_read_displays" = "无法读取显示器列表";
+"status.displays_found" = "已发现 %d 台显示器";
+"status.display_lut_unsupported" = "此显示器不支持色表调整";
+"status.hardware_brightness_unsupported" = "此显示器不支持系统硬件亮度控制";
+"status.hardware_brightness_set" = "已设置硬件亮度为 %d%%";
+"status.cannot_apply_lut" = "无法应用色表（CoreGraphics 错误 %d）";
+"status.display_lut_restored" = "已恢复当前显示器的原始色表";
+"status.adjustments_applied" = "调整已应用到 %@";
+"status.lut_unavailable" = "此显示器未提供可调整的 RGB 色表";
+"status.cannot_read_lut" = "无法读取显示器色表（CoreGraphics 错误 %d）";
+"status.display_safeguarded" = "已保留最低可见输出，避免屏幕全黑";
+"status.no_groups" = "未创建显示器群组";
+"status.group_name_required" = "群组名称不能为空";
+"status.group_members_required" = "请至少选择一台显示器";
+"status.group_created" = "已创建群组“%@”";
+"status.group_members_updated" = "已更新群组成员";
+"status.group_deleted" = "已删除显示器群组";
+"status.select_group" = "请先选择一个显示器群组";
+"status.group_synced" = "已同步图像调整到 %d 台显示器";
+"status.group_synced_partial" = "已同步 %d/%d 台显示器；其余显示器不支持色表调整";
+"status.groups_loaded" = "已加载 %d 个显示器群组";
+"status.choose_layout_action" = "选择一项布局操作";
+"status.source_target_same" = "源显示器与目标显示器不能相同";
+"status.cannot_start_layout" = "无法开始显示器布局事务（错误 %d）";
+"status.cannot_configure_mirroring" = "无法配置镜像（错误 %d）";
+"status.mirroring_enabled" = "已启用系统镜像";
+"status.cannot_apply_mirroring" = "无法应用镜像（错误 %d）";
+"status.cannot_remove_mirroring" = "无法取消镜像（错误 %d）";
+"status.mirroring_disabled" = "已取消系统镜像";
+"status.display_moved" = "已将显示器移动到 %d, %d";
+"status.cannot_move_display" = "无法应用显示器位置（错误 %d）";
+"status.choose_display_for_modes" = "选择显示器以查看模式";
+"status.no_display_selected" = "未选择显示器";
+"status.no_modes" = "系统未返回可用显示模式";
+"status.modes_loaded" = "已加载 %d 个系统显示模式";
+"status.mode_unavailable" = "所选显示模式不可用";
+"status.mode_applied" = "已应用 %@";
+"status.cannot_switch_mode" = "无法切换显示模式（CoreGraphics 错误 %d）";
+"status.choose_display_for_profile" = "选择显示器以读取颜色描述文件";
+"status.no_profile_info" = "macOS 未返回此显示器的 ColorSync 描述文件信息";
+"status.no_rgb_profiles" = "未找到可用的 RGB 显示器描述文件";
+"status.profiles_loaded" = "已加载 %d 个可用 RGB 描述文件";
+"status.profile_rejected" = "macOS 拒绝设置该颜色描述文件";
+"status.profile_set" = "已设置颜色描述文件：%@";
+"status.profile_restore_rejected" = "macOS 拒绝恢复出厂颜色描述文件";
+"status.profile_restored" = "已恢复 macOS 为此显示器登记的出厂描述文件";
+"status.framebuffer_reading" = "正在读取帧缓冲状态";
+"status.no_framebuffer_controls" = "当前显示器未公开可用的帧缓冲控制";
+"status.framebuffer_read" = "已读取当前帧缓冲状态";
+"status.framebuffer_api_unavailable" = "此 macOS 版本未提供帧缓冲色彩模式接口";
+"status.cannot_open_framebuffer" = "无法打开此显示器的帧缓冲服务";
+"status.cannot_apply_framebuffer_mode" = "无法应用%@（系统错误 %d）";
+"status.framebuffer_mode_applied" = "已应用%@";
+"status.no_initial_framebuffer_state" = "尚未记录此显示器的初始帧缓冲状态";
+"status.framebuffer_restored" = "已恢复 Beta Display 启动时记录的帧缓冲状态";
+"status.framebuffer_restore_failed" = "无法恢复：%@";
+"status.cannot_locate_framebuffer" = "无法定位此显示器的帧缓冲服务";
+"status.framebuffer_feature_unavailable" = "当前显示器未公开%@控制";
+"status.cannot_set_framebuffer_feature" = "无法设置%@（系统错误 %d）";
+"status.framebuffer_feature_unconfirmed" = "系统没有确认%@的新状态";
+"status.framebuffer_feature_set" = "%@已%@";
+"state.enabled" = "启用";
+"state.disabled" = "停用";
+"feature.gpu_dithering" = "GPU 抖动";
+"feature.gpu_uniformity" = "GPU 均一性校正";
+"feature.color_mode" = "色彩模式";
+"login.enabled" = "已在登录时启动";
+"login.disabled" = "未在登录时启动";
+"login.requires_approval" = "等待在“系统设置 > 通用 > 登录项”中批准";
+"login.enable_failed" = "无法启用登录项：%@";
+"login.disable_failed" = "无法取消登录项：%@";
+"login.status_unavailable" = "系统未返回登录项状态";
+
+/* 诊断说明 */
+"diagnostics.mode_description" = "%d × %d · %d × %d 像素 · %.0f Hz";
+"diagnostics.no_current_mode" = "系统未返回当前模式";
+"diagnostics.built_in_edid_unavailable" = "内建显示屏通常不公开可读取的 EDID。";
+"diagnostics.edid_unavailable" = "当前 macOS SDK 未提供受支持的按 CGDisplayID 读取 EDID 路径；Beta Display 不使用已废弃的 IOService 端口。";
+
+/* 自检 */
+"self_test.neutral_transform" = "中性变换改变了 %@ 的 %.3f 值";
+"self_test.quantization" = "量化未按预期吸附到目标级别";
+"self_test.gain_scale" = "增益未使用预期的 10% 缩放";
+"self_test.gamma_scale" = "伽马未使用预期的反向缩放";
+"self_test.temperature_scale" = "色温未使用预期的通道缩放";
+"self_test.lut" = "生成的色表未保留 RGB 恒等映射";
+"self_test.group" = "显示器群组模型未保留成员";
+"self_test.rgb_gain_safety" = "RGB 增益保护未保留可见通道";
+"self_test.version_comparison" = "更新版本比较失败";

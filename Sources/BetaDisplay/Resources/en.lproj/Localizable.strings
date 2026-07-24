@@ -1,0 +1,241 @@
+/* Application */
+"app.self_test_failed" = "Beta Display Self-Test Failed";
+"app.quit" = "Quit Beta Display";
+"app.refresh_displays" = "Refresh Displays";
+
+/* Navigation */
+"nav.general" = "General";
+"nav.displays" = "Displays";
+"nav.groups" = "Display Groups";
+"nav.layout" = "Layout & Modes";
+"nav.image" = "Image Adjustments";
+"nav.diagnostics" = "Diagnostics";
+"nav.about" = "About";
+"header.target_display" = "Target Display";
+
+/* General */
+"general.title" = "General";
+"general.language" = "Language";
+"general.language.automatic" = "Automatic (System)";
+"general.language.english" = "English";
+"general.language.simplified_chinese" = "Simplified Chinese";
+"general.show_menu_icon" = "Show Beta Display in the menu bar";
+"general.launch_at_login" = "Launch Beta Display at login";
+"general.refresh_login_status" = "Refresh Login Item";
+"general.restore_defaults" = "Restore Defaults";
+"general.menu_hidden_hint" = "When hidden, Beta Display remains available in the Dock.";
+
+/* About */
+"about.title" = "About Beta Display";
+"about.version" = "Version %@";
+"about.check_updates" = "Check for Updates";
+"about.checking" = "Checking…";
+"about.up_to_date" = "You’re up to date.";
+"about.update_available" = "Version %@ is available.";
+"about.open_release" = "Open Release";
+"about.no_public_release" = "No public release is available yet.";
+"about.check_failed" = "Unable to check for updates.";
+
+/* Displays */
+"display.current" = "Current Display";
+"display.name" = "Name";
+"display.status" = "Status";
+"display.pixels" = "Pixels";
+"display.physical_size" = "Physical Size";
+"display.gamma_capacity" = "Gamma Capacity";
+"display.hardware_brightness" = "Hardware Brightness";
+"display.connected_extended" = "Connected, Extended";
+"display.mirroring" = "Mirroring";
+"display.built_in" = "Built-in";
+"display.external" = "External";
+"display.built_in_display" = "Built-in Display";
+"display.external_display" = "External Display";
+"display.sample_points" = "%d sample points";
+"display.system_hardware_brightness" = "System hardware brightness: %d%%";
+"display.hardware_brightness_unavailable" = "Hardware brightness is not available for this display.";
+
+/* Groups */
+"groups.title" = "Display Groups";
+"groups.current" = "Current Group";
+"groups.none" = "No Groups";
+"groups.create" = "New Group…";
+"groups.delete" = "Delete Group";
+"groups.sync_adjustments" = "Sync Image Adjustments";
+"groups.new_alert_title" = "New Display Group";
+"groups.new_alert_body" = "Image adjustments will be synchronized to the group members.";
+"groups.default_name" = "New Group";
+"action.create" = "Create";
+"action.cancel" = "Cancel";
+"action.reset_default" = "Reset to Default";
+"action.reset_adjustment" = "Reset %@ to Default";
+
+/* Layout and modes */
+"modes.title" = "Display Modes & Scaling";
+"modes.available" = "Available Mode";
+"modes.refresh" = "Refresh Modes";
+"modes.hidpi" = "HiDPI";
+"modes.low_resolution" = "Low Resolution";
+"layout.title" = "Layout & Mirroring";
+"layout.mirror_to" = "Mirror To";
+"layout.no_mirroring" = "Not Mirroring";
+"layout.position" = "Position";
+"layout.horizontal" = "Horizontal";
+"layout.vertical" = "Vertical";
+
+/* Image adjustments */
+"image.title" = "Image Adjustments";
+"image.contrast" = "Contrast";
+"image.gamma" = "Gamma";
+"image.gain" = "Gain";
+"image.temperature" = "Temperature";
+"image.software_brightness" = "Software Brightness";
+"image.quantization" = "Quantization";
+"image.quantization_off" = "Off";
+"image.quantization_levels" = "%d levels";
+"image.rgb_channels" = "RGB Channels";
+"image.gamma_red" = "Gamma (Red)";
+"image.gamma_green" = "Gamma (Green)";
+"image.gamma_blue" = "Gamma (Blue)";
+"image.gain_red" = "Gain (Red)";
+"image.gain_green" = "Gain (Green)";
+"image.gain_blue" = "Gain (Blue)";
+"profile.title" = "Color Profile";
+"profile.current" = "Current Profile";
+"profile.restore_factory" = "Restore Factory Profile";
+"profile.refresh" = "Refresh Profiles";
+"profile.current_suffix" = "%@ (Current)";
+"system_modes.title" = "System Color Modes";
+"system_modes.night_shift" = "Night Shift";
+"system_modes.night_shift_strength" = "Warmth";
+"system_modes.true_tone" = "True Tone";
+"system_modes.synced" = "Synced with macOS";
+"system_modes.status_separator" = "; ";
+"system_modes.night_shift_unavailable" = "Night Shift unavailable";
+"system_modes.true_tone_unavailable" = "True Tone unavailable";
+"system_modes.night_shift_set_failed" = "Could not set Night Shift";
+"system_modes.night_shift_strength_failed" = "Could not set Night Shift warmth";
+"system_modes.true_tone_set_failed" = "Could not set True Tone";
+"framebuffer.title" = "Framebuffer Color Mode";
+"framebuffer.mode" = "Framebuffer Mode";
+"framebuffer.auto_dither" = "Enable GPU dithering for inverse or grayscale modes";
+"framebuffer.auto_dither_tooltip" = "Available only when this display exposes the GPU dithering property.";
+"framebuffer.refresh" = "Refresh Status";
+"framebuffer.restore_startup" = "Restore Startup State";
+"framebuffer.tools" = "GPU Framebuffer Tools";
+"framebuffer.enable_dithering" = "Enable GPU Dithering";
+"framebuffer.enable_uniformity" = "Enable GPU Uniformity Correction";
+"framebuffer.standard" = "Standard Framebuffer";
+"framebuffer.inverted" = "Inverted Framebuffer";
+"framebuffer.grayscale" = "Grayscale Framebuffer";
+"framebuffer.inverted_grayscale" = "Inverted Grayscale Framebuffer";
+"recovery.title" = "Reset";
+"recovery.reset" = "Reset Adjustments";
+
+/* Diagnostics */
+"diagnostics.title" = "Display Diagnostics";
+"diagnostics.copy" = "Copy Diagnostics";
+"diagnostics.name" = "Name: %@";
+"diagnostics.id" = "Display ID: %@";
+"diagnostics.type" = "Type: %@";
+"diagnostics.vendor" = "Vendor / Model / Serial: %@ / %@ / %@";
+"diagnostics.pixels" = "Pixel Size: %d × %d";
+"diagnostics.physical" = "Physical Size: %d × %d mm";
+"diagnostics.mode" = "Current Mode: %@";
+"diagnostics.gamma" = "Gamma Capacity: %d";
+"diagnostics.edid" = "EDID: %@";
+"diagnostics.unsupported_title" = "Unavailable Controls";
+"framebuffer.tools_status" = "GPU dithering: %@; Uniformity correction: %@";
+"framebuffer.exposed" = "not exposed";
+
+/* Controller status */
+"status.ready" = "Ready";
+"status.no_active_displays" = "No active displays found";
+"status.cannot_read_displays" = "Unable to read the display list";
+"status.displays_found" = "%d display(s) found";
+"status.display_lut_unsupported" = "This display does not support gamma-table adjustments";
+"status.hardware_brightness_unsupported" = "This display does not support system hardware brightness";
+"status.hardware_brightness_set" = "Hardware brightness set to %d%%";
+"status.cannot_apply_lut" = "Unable to apply the gamma table (CoreGraphics error %d)";
+"status.display_lut_restored" = "Original gamma table restored for this display";
+"status.adjustments_applied" = "Adjustments applied to %@";
+"status.lut_unavailable" = "This display did not provide an adjustable RGB gamma table";
+"status.cannot_read_lut" = "Unable to read the gamma table (CoreGraphics error %d)";
+"status.display_safeguarded" = "A minimum visible output was kept to prevent a black screen";
+"status.no_groups" = "No display groups";
+"status.group_name_required" = "A group name is required";
+"status.group_members_required" = "Select at least one display";
+"status.group_created" = "Group “%@” created";
+"status.group_members_updated" = "Group members updated";
+"status.group_deleted" = "Display group deleted";
+"status.select_group" = "Select a display group first";
+"status.group_synced" = "Image adjustments synchronized to %d display(s)";
+"status.group_synced_partial" = "%d/%d displays synchronized; remaining displays do not support gamma-table adjustments";
+"status.groups_loaded" = "%d display group(s) loaded";
+"status.choose_layout_action" = "Choose a layout action";
+"status.source_target_same" = "Source and target displays must be different";
+"status.cannot_start_layout" = "Unable to start display layout transaction (error %d)";
+"status.cannot_configure_mirroring" = "Unable to configure mirroring (error %d)";
+"status.mirroring_enabled" = "System mirroring enabled";
+"status.cannot_apply_mirroring" = "Unable to apply mirroring (error %d)";
+"status.cannot_remove_mirroring" = "Unable to stop mirroring (error %d)";
+"status.mirroring_disabled" = "System mirroring stopped";
+"status.display_moved" = "Display moved to %d, %d";
+"status.cannot_move_display" = "Unable to move display (error %d)";
+"status.choose_display_for_modes" = "Select a display to view modes";
+"status.no_display_selected" = "No display selected";
+"status.no_modes" = "macOS returned no display modes";
+"status.modes_loaded" = "%d display mode(s) loaded";
+"status.mode_unavailable" = "The selected display mode is unavailable";
+"status.mode_applied" = "Applied %@";
+"status.cannot_switch_mode" = "Unable to switch display mode (CoreGraphics error %d)";
+"status.choose_display_for_profile" = "Select a display to read color profiles";
+"status.no_profile_info" = "macOS returned no ColorSync profile information for this display";
+"status.no_rgb_profiles" = "No RGB display profiles found";
+"status.profiles_loaded" = "%d RGB profile(s) loaded";
+"status.profile_rejected" = "macOS rejected that color profile";
+"status.profile_set" = "Color profile set: %@";
+"status.profile_restore_rejected" = "macOS rejected restoring the factory color profile";
+"status.profile_restored" = "Factory color profile restored";
+"status.framebuffer_reading" = "Reading framebuffer status";
+"status.no_framebuffer_controls" = "This display does not expose framebuffer controls";
+"status.framebuffer_read" = "Framebuffer status read";
+"status.framebuffer_api_unavailable" = "This macOS version does not provide framebuffer color-mode controls";
+"status.cannot_open_framebuffer" = "Unable to open this display’s framebuffer service";
+"status.cannot_apply_framebuffer_mode" = "Unable to apply %@ (system error %d)";
+"status.framebuffer_mode_applied" = "Applied %@";
+"status.no_initial_framebuffer_state" = "No initial framebuffer state was recorded for this display";
+"status.framebuffer_restored" = "Framebuffer startup state restored";
+"status.framebuffer_restore_failed" = "Could not restore: %@";
+"status.cannot_locate_framebuffer" = "Unable to locate this display’s framebuffer service";
+"status.framebuffer_feature_unavailable" = "This display does not expose %@ control";
+"status.cannot_set_framebuffer_feature" = "Unable to set %@ (system error %d)";
+"status.framebuffer_feature_unconfirmed" = "The system did not confirm the new %@ state";
+"status.framebuffer_feature_set" = "%@ %@";
+"state.enabled" = "enabled";
+"state.disabled" = "disabled";
+"feature.gpu_dithering" = "GPU dithering";
+"feature.gpu_uniformity" = "GPU uniformity correction";
+"feature.color_mode" = "color mode";
+"login.enabled" = "Launches at login";
+"login.disabled" = "Does not launch at login";
+"login.requires_approval" = "Approval is required in System Settings > General > Login Items";
+"login.enable_failed" = "Unable to enable the login item: %@";
+"login.disable_failed" = "Unable to disable the login item: %@";
+"login.status_unavailable" = "The system did not return a login-item status";
+
+/* Diagnostics notes */
+"diagnostics.mode_description" = "%d × %d · %d × %d pixels · %.0f Hz";
+"diagnostics.no_current_mode" = "macOS returned no current display mode";
+"diagnostics.built_in_edid_unavailable" = "Built-in displays do not usually expose a readable EDID.";
+"diagnostics.edid_unavailable" = "The current macOS SDK has no supported CGDisplayID-to-EDID path; Beta Display does not use the deprecated IOService port.";
+
+/* Self-test */
+"self_test.neutral_transform" = "Neutral transform changed %@ at %.3f";
+"self_test.quantization" = "Quantization did not snap to the expected level";
+"self_test.gain_scale" = "Gain did not use the expected 10 percent scale";
+"self_test.gamma_scale" = "Gamma did not use the expected inverse scale";
+"self_test.temperature_scale" = "Temperature did not use the expected channel scale";
+"self_test.lut" = "Generated LUT did not preserve the RGB identity table";
+"self_test.group" = "Display group model did not retain its members";
+"self_test.rgb_gain_safety" = "RGB gain safety did not preserve a visible channel";
+"self_test.version_comparison" = "Update version comparison failed";
