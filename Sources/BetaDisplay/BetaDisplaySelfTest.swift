@@ -3,6 +3,7 @@ import Foundation
 
 /// Lightweight, dependency-free verification for environments that only have
 /// the macOS Command Line Tools instead of XCTest/Swift Testing.
+@MainActor
 enum BetaDisplaySelfTest {
     static func run() -> [String] {
         var failures: [String] = []
@@ -134,13 +135,52 @@ enum BetaDisplaySelfTest {
         if lut.red.count != 17 || lut.green.count != 17 || lut.blue.count != 17 || lut.red.first != 0 || lut.red.last != 1 {
             failures.append(L10n.text("self_test.lut"))
         }
+
+        // Reapplying an adjustment from a stable baseline must be idempotent.
+        var reducedGain = ColorAdjustments.neutral
+        reducedGain.redGain = 0.2
+        reducedGain.greenGain = 0.2
+        reducedGain.blueGain = 0.2
+        let firstGainLUT = DisplayLUT(base: lut, adjustments: reducedGain)
+        let repeatedGainLUT = DisplayLUT(base: lut, adjustments: reducedGain)
+        let compoundedGainLUT = DisplayLUT(base: firstGainLUT, adjustments: reducedGain)
+        if !repeatedGainLUT.approximatelyMatches(firstGainLUT, tolerance: 0.000_01)
+            || compoundedGainLUT.approximatelyMatches(firstGainLUT, tolerance: 0.000_01)
+            || abs(Double(firstGainLUT.red.last ?? 0) - 0.64) >= 0.000_01
+            || abs(Double(compoundedGainLUT.red.last ?? 0) - 0.4096) >= 0.000_01 {
+            failures.append(L10n.text("self_test.lut"))
+        }
+
+        // The clean baseline must survive an unclean process restart and be
+        // removed only after a successful restore.
+        let suiteName = "BetaDisplay.self-test.\(UUID().uuidString)"
+        if let defaults = UserDefaults(suiteName: suiteName) {
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let displayKey = "self-test-display"
+            let writer = DisplayLUTRecoveryStore(defaults: defaults)
+            writer.recordBaseline(lut, forDisplayKey: displayKey)
+            let reader = DisplayLUTRecoveryStore(defaults: defaults)
+            if reader.baseline(forDisplayKey: displayKey)?.approximatelyMatches(
+                lut,
+                tolerance: 0.000_01
+            ) != true {
+                failures.append(L10n.text("self_test.lut"))
+            }
+            reader.removeBaseline(forDisplayKey: displayKey)
+            if DisplayLUTRecoveryStore(defaults: defaults)
+                .baseline(forDisplayKey: displayKey) != nil {
+                failures.append(L10n.text("self_test.lut"))
+            }
+        } else {
+            failures.append(L10n.text("self_test.lut"))
+        }
         let group = DisplayGroup(name: "self-test", displayKeys: ["one", "two"])
         if group.name != "self-test" || group.displayKeys != ["one", "two"] {
             failures.append(L10n.text("self_test.group"))
         }
-        if !AppMetadata.isVersion("v1.1.1", newerThan: "1.0.9")
-            || AppMetadata.isVersion("v1.1.1", newerThan: "1.1.1")
-            || AppMetadata.isVersion("v1.0.9", newerThan: "1.1.1") {
+        if !AppMetadata.isVersion("v1.1.2", newerThan: "1.1.1")
+            || AppMetadata.isVersion("v1.1.2", newerThan: "1.1.2")
+            || AppMetadata.isVersion("v1.1.1", newerThan: "1.1.2") {
             failures.append(L10n.text("self_test.version_comparison"))
         }
         return failures

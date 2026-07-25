@@ -1,9 +1,28 @@
 import AppKit
+import Darwin
 
 @main
 struct BetaDisplayMain {
     @MainActor
     static func main() {
+        if CommandLine.arguments.contains("--live-lut-test") {
+            let failures = BetaDisplayLiveLUTTest.run()
+            guard !failures.isEmpty else {
+                print("Beta Display live LUT test passed")
+                return
+            }
+            failures.forEach { print("FAIL: \($0)") }
+            exit(EXIT_FAILURE)
+        }
+        if CommandLine.arguments.contains("--self-test") {
+            let failures = BetaDisplaySelfTest.run()
+            guard !failures.isEmpty else {
+                print("Beta Display self-test passed")
+                return
+            }
+            failures.forEach { print($0) }
+            exit(EXIT_FAILURE)
+        }
         let singleInstanceController = SingleInstanceController()
         guard singleInstanceController.claim() else {
             singleInstanceController.requestActivationOfExistingInstance()
@@ -261,12 +280,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         layoutController.applySavedLayout(to: displayController.displays.map(\.id))
         displayController.refreshDisplays()
         displayController.captureSessionState()
-        colorProfileController.applySavedProfiles(to: displayController.displays.map(\.id))
+        let displayIDs = displayController.displays.map(\.id)
+        colorProfileController.applySavedProfiles(to: displayIDs) { displayID, change in
+            displayController.performColorProfileChange(for: displayID, change)
+        }
         framebufferController.applySavedState(
-            to: displayController.displays.map(\.id),
+            to: displayIDs,
             automaticallyEnableDitheringForColorModes: preferences.enableDitheringForColorModes
         )
-        displayController.rebaseWorkingLUTs()
         displayController.applySavedAdjustments()
     }
 
@@ -281,12 +302,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             displayController.refreshDisplays()
         }
 
-        colorProfileController.applySavedProfiles(to: displayController.displays.map(\.id))
+        let displayIDs = displayController.displays.map(\.id)
+        colorProfileController.applySavedProfiles(to: displayIDs) { displayID, change in
+            displayController.performColorProfileChange(for: displayID, change)
+        }
         framebufferController.applySavedState(
-            to: displayController.displays.map(\.id),
+            to: displayIDs,
             automaticallyEnableDitheringForColorModes: preferences.enableDitheringForColorModes
         )
-        displayController.rebaseAndApplySavedAdjustmentsAfterSystemChange()
+        displayController.applySavedAdjustmentsAfterSystemChange()
 
         // The controllers keep selected-display presentation state, so finish
         // with the selected display after any all-display restoration.

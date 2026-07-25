@@ -1031,13 +1031,20 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         guard !isRendering,
               let url = sender.selectedItem?.representedObject as? URL
         else { return }
-        colorProfileController.setProfile(url: url, for: displayController.selectedDisplayID)
-        displayController.rebaseSelectedDisplayAndApply()
+        displayController.performSelectedDisplayColorProfileChange {
+            colorProfileController.setProfile(
+                url: url,
+                for: displayController.selectedDisplayID
+            )
+        }
     }
 
     @objc private func restoreFactoryProfile(_ sender: Any?) {
-        colorProfileController.restoreFactoryProfile(for: displayController.selectedDisplayID)
-        displayController.rebaseSelectedDisplayAndApply()
+        displayController.performSelectedDisplayColorProfileChange {
+            colorProfileController.restoreFactoryProfile(
+                for: displayController.selectedDisplayID
+            )
+        }
     }
 
     @objc private func refreshColorProfiles(_ sender: Any?) {

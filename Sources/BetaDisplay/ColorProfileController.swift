@@ -108,24 +108,25 @@ final class ColorProfileController {
         publish()
     }
 
-    func setProfile(url: URL, for displayID: CGDirectDisplayID?) {
+    @discardableResult
+    func setProfile(url: URL, for displayID: CGDirectDisplayID?) -> Bool {
         guard let displayID,
               let uuid = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue(),
               let defaultProfileID
         else {
             statusMessage = L10n.text("status.no_display_selected")
             publish()
-            return
+            return false
         }
         if currentProfileURL == url {
-            return
+            return false
         }
         captureInitialProfileIfNeeded(for: displayID)
         let profileInfo: NSDictionary = [defaultProfileID: url as CFURL]
         guard ColorSyncDeviceSetCustomProfiles(displayDeviceClass, uuid, profileInfo) else {
             statusMessage = L10n.text("status.profile_rejected")
             publish()
-            return
+            return false
         }
         refresh(for: displayID)
         configurationStore.update(for: displayID) {
@@ -139,26 +140,28 @@ final class ColorProfileController {
             url.deletingPathExtension().lastPathComponent
         )
         publish()
+        return true
     }
 
-    func restoreFactoryProfile(for displayID: CGDirectDisplayID?) {
+    @discardableResult
+    func restoreFactoryProfile(for displayID: CGDirectDisplayID?) -> Bool {
         guard let displayID,
               let uuid = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue(),
               let defaultProfileID
         else {
             statusMessage = L10n.text("status.no_display_selected")
             publish()
-            return
+            return false
         }
         if currentProfileURL == factoryProfileURL {
-            return
+            return false
         }
         captureInitialProfileIfNeeded(for: displayID)
         let profileInfo: NSDictionary = [defaultProfileID: kCFNull as Any]
         guard ColorSyncDeviceSetCustomProfiles(displayDeviceClass, uuid, profileInfo) else {
             statusMessage = L10n.text("status.profile_restore_rejected")
             publish()
-            return
+            return false
         }
         refresh(for: displayID)
         configurationStore.update(for: displayID) {
@@ -166,6 +169,7 @@ final class ColorProfileController {
         }
         statusMessage = L10n.text("status.profile_restored")
         publish()
+        return true
     }
 
     func restoreAllInitialProfiles() {
@@ -183,16 +187,21 @@ final class ColorProfileController {
         }
     }
 
-    func applySavedProfiles(to displayIDs: [CGDirectDisplayID]) {
+    func applySavedProfiles(
+        to displayIDs: [CGDirectDisplayID],
+        applying change: (CGDirectDisplayID, () -> Bool) -> Void
+    ) {
         for displayID in displayIDs {
             refresh(for: displayID)
             guard let saved = configurationStore.configuration(for: displayID)?.colorProfile else { continue }
-            if saved.usesFactoryProfile {
-                restoreFactoryProfile(for: displayID)
+            if saved.usesFactoryProfile,
+               currentProfileURL != factoryProfileURL {
+                change(displayID) { self.restoreFactoryProfile(for: displayID) }
             } else if let string = saved.profileURL,
                       let url = URL(string: string),
-                      FileManager.default.fileExists(atPath: url.path) {
-                setProfile(url: url, for: displayID)
+                      FileManager.default.fileExists(atPath: url.path),
+                      currentProfileURL != url {
+                change(displayID) { self.setProfile(url: url, for: displayID) }
             }
         }
     }
