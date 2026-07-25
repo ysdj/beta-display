@@ -20,7 +20,7 @@ cask "beta-display" do
   end
 
   zap trash: [
-    "~/Library/Preferences/io.github.ysdj.betadisplay.plist",
     "~/Library/Application Support/BetaDisplay",
+    "~/Library/Preferences/io.github.ysdj.betadisplay.plist",
   ]
 end

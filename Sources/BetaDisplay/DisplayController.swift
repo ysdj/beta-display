@@ -24,6 +24,10 @@ final class DisplayController {
     var onStateChanged: (() -> Void)?
     private var sessionOriginalLUTs: [String: DisplayLUT] = [:]
     private var workingBaseLUTs: [String: DisplayLUT] = [:]
+    /// The last transfer table submitted by this process. Wake notifications
+    /// can arrive again after a successful restore; retaining this lets us
+    /// distinguish an app-owned table from a new ColorSync baseline.
+    private var lastAppliedLUTs: [String: DisplayLUT] = [:]
     private var applyWorkItem: DispatchWorkItem?
     private let hardwareBrightness = HardwareBrightnessController()
     private(set) var hardwareBrightnessValue: Double?
@@ -69,6 +73,7 @@ final class DisplayController {
         let activeSessionKeys = Set(displays.map { DisplayIdentity.sessionKey(for: $0.id) })
         adjustmentsByDisplay = adjustmentsByDisplay.filter { activeSessionKeys.contains($0.key) }
         workingBaseLUTs = workingBaseLUTs.filter { activeSessionKeys.contains($0.key) }
+        lastAppliedLUTs = lastAppliedLUTs.filter { activeSessionKeys.contains($0.key) }
         if let selectedDisplayID, displays.contains(where: { $0.id == selectedDisplayID }) {
             publishState()
             return
@@ -204,6 +209,7 @@ final class DisplayController {
 
     func rebaseWorkingLUTs() {
         workingBaseLUTs.removeAll()
+        lastAppliedLUTs.removeAll()
         for display in displays {
             if let table = readCurrentLUT(for: display.id, reportsErrors: false) {
                 workingBaseLUTs[DisplayIdentity.sessionKey(for: display.id)] = table
@@ -213,8 +219,10 @@ final class DisplayController {
 
     func rebaseSelectedDisplayAndApply() {
         guard let selectedDisplayID else { return }
+        let sessionKey = DisplayIdentity.sessionKey(for: selectedDisplayID)
+        lastAppliedLUTs[sessionKey] = nil
         if let table = readCurrentLUT(for: selectedDisplayID, reportsErrors: false) {
-            workingBaseLUTs[DisplayIdentity.sessionKey(for: selectedDisplayID)] = table
+            workingBaseLUTs[sessionKey] = table
         }
         applyCurrentAdjustments(reportsStatus: false)
     }
@@ -239,12 +247,33 @@ final class DisplayController {
     }
 
     /// Rewrites the saved color tables after the system has supplied a fresh
-    /// ColorSync baseline. This is intentionally unconditional: tiny gain or
-    /// quantization changes can be below a visual comparison tolerance after
-    /// wake, but still need to be restored exactly.
+    /// ColorSync baseline. A repeated wake notification is ignored when the
+    /// current table is still the result of this process's previous restore;
+    /// otherwise the new system table becomes the working baseline.
     @discardableResult
     func rebaseAndApplySavedAdjustmentsAfterSystemChange() -> Bool {
-        rebaseWorkingLUTs()
+        var currentLUTs: [String: DisplayLUT] = [:]
+        var alreadyApplied = Set<String>()
+
+        // A wake can emit more than one notification. If the current table is
+        // still the one submitted by the previous recovery pass, retaining the
+        // original working base is essential: rebasing from this table would
+        // apply the selected gain a second time.
+        for display in displays {
+            let sessionKey = DisplayIdentity.sessionKey(for: display.id)
+            guard let current = readCurrentLUT(for: display.id, reportsErrors: false) else {
+                continue
+            }
+            currentLUTs[sessionKey] = current
+            if let lastApplied = lastAppliedLUTs[sessionKey],
+               lastApplied.approximatelyMatches(current) {
+                alreadyApplied.insert(sessionKey)
+                continue
+            }
+            workingBaseLUTs[sessionKey] = current
+            lastAppliedLUTs[sessionKey] = nil
+        }
+
         var restoredAny = false
         for display in displays {
             guard let saved = configurationStore.configuration(for: display.id)?.adjustments else { continue }
@@ -253,6 +282,11 @@ final class DisplayController {
             adjustmentsByDisplay[sessionKey] = safeAdjustments
             if safeAdjustments != saved {
                 configurationStore.update(for: display.id) { $0.adjustments = safeAdjustments }
+            }
+            guard currentLUTs[sessionKey] != nil,
+                  !alreadyApplied.contains(sessionKey)
+            else {
+                continue
             }
             if applyImmediately(displayID: display.id, adjustments: safeAdjustments, reportStatus: false) {
                 restoredAny = true
@@ -312,6 +346,7 @@ final class DisplayController {
             }
             return false
         }
+        lastAppliedLUTs[DisplayIdentity.sessionKey(for: displayID)] = lut
         if reportStatus {
             imageStatusMessage = adjustments.isNeutral
                 ? L10n.text("status.display_lut_restored")

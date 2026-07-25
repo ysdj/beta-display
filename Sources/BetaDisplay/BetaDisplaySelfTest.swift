@@ -138,9 +138,9 @@ enum BetaDisplaySelfTest {
         if group.name != "self-test" || group.displayKeys != ["one", "two"] {
             failures.append(L10n.text("self_test.group"))
         }
-        if !AppMetadata.isVersion("v1.1.0", newerThan: "1.0.9")
-            || AppMetadata.isVersion("v1.1.0", newerThan: "1.1.0")
-            || AppMetadata.isVersion("v1.0.9", newerThan: "1.1.0") {
+        if !AppMetadata.isVersion("v1.1.1", newerThan: "1.0.9")
+            || AppMetadata.isVersion("v1.1.1", newerThan: "1.1.1")
+            || AppMetadata.isVersion("v1.0.9", newerThan: "1.1.1") {
             failures.append(L10n.text("self_test.version_comparison"))
         }
         return failures
