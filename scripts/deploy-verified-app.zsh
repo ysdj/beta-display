@@ -231,13 +231,15 @@ release_deployment_lock() {
 }
 
 remove_owned_path() {
-    local path="$1"
+    # In zsh, `path` is the special array backing PATH. Never use that name
+    # for an app path here: doing so makes the cleanup command unresolvable.
+    local owned_path="$1"
     local prefix="$2"
-    [[ -n "$path" && "$path:h" == "${target_app:h}" && "$path:t" == ${~prefix} ]] || {
-        print -u2 -- "Refusing cleanup of unexpected deployment path: $path"
+    [[ -n "$owned_path" && "$owned_path:h" == "${target_app:h}" && "$owned_path:t" == ${~prefix} ]] || {
+        print -u2 -- "Refusing cleanup of unexpected deployment path: $owned_path"
         return 1
     }
-    rm -rf -- "$path"
+    /bin/rm -rf -- "$owned_path"
 }
 
 recover_interrupted_deployment_if_needed() {
