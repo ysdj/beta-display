@@ -4,7 +4,7 @@ enum AppMetadata {
     static let latestReleaseURL = URL(string: "https://api.github.com/repos/ysdj/beta-display/releases/latest")!
 
     static var version: String {
-        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.1.5"
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.1.6"
     }
 
     static func isVersion(_ candidate: String, newerThan current: String) -> Bool {
