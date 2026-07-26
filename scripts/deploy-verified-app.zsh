@@ -9,6 +9,9 @@ project_dir=${0:A:h:h}
 target_app="/Applications/Beta Display.app"
 source_app=""
 expected_marker="beta-display-lut-baseline-guard-v2"
+deployment_lock_directory=""
+deployment_lock_owner_file=""
+deployment_lock_held=false
 staging_app=""
 backup_app=""
 install_committed=false
@@ -121,6 +124,8 @@ verify_installed_app() {
         reference_build=$(plist_value "$reference_app" CFBundleVersion)
         local reference_sha256
         reference_sha256=$(app_sha256 "$reference_app")
+        require_gate "$reference_app" "$reference_version" "$reference_build"
+        require_self_test "$reference_app"
         [[ "$identifier" == "$reference_identifier" && "$version" == "$reference_version" && "$build" == "$reference_build" ]] || {
             print -u2 -- "Installed bundle metadata differs from the reference app"
             exit 1
@@ -162,9 +167,64 @@ running_beta_display_pids() {
     running_beta_display_processes | awk -F "\t" '{ print $1 }'
 }
 
-running_target_pids() {
-    local executable_path="$1"
-    running_beta_display_processes | awk -F "\t" -v path="$executable_path" '$2 == path { print $1 }'
+acquire_deployment_lock() {
+    deployment_lock_directory="${target_app:h}/.Beta Display.deploy.lock"
+    deployment_lock_owner_file="$deployment_lock_directory/owner-pid"
+    if ! mkdir "$deployment_lock_directory" 2>/dev/null; then
+        print -u2 -- "Another deployment is active or an interrupted deployment requires inspection: $deployment_lock_directory"
+        exit 1
+    fi
+    deployment_lock_held=true
+    if ! print -r -- "$$" > "$deployment_lock_owner_file"; then
+        rmdir "$deployment_lock_directory" 2>/dev/null || true
+        deployment_lock_held=false
+        print -u2 -- "Could not record deployment lock ownership"
+        exit 1
+    fi
+}
+
+release_deployment_lock() {
+    [[ "$deployment_lock_held" == true ]] || return 0
+    local recorded_owner=""
+    [[ -f "$deployment_lock_owner_file" ]] && recorded_owner=$(<"$deployment_lock_owner_file")
+    if [[ -n "$recorded_owner" && "$recorded_owner" != "$$" ]]; then
+        print -u2 -- "Refusing to remove deployment lock owned by PID $recorded_owner"
+        return 0
+    fi
+    rm -f -- "$deployment_lock_owner_file"
+    rmdir "$deployment_lock_directory" 2>/dev/null || {
+        print -u2 -- "Could not release deployment lock: $deployment_lock_directory"
+        return 0
+    }
+    deployment_lock_held=false
+}
+
+remove_owned_path() {
+    local path="$1"
+    local prefix="$2"
+    [[ -n "$path" && "$path:h" == "${target_app:h}" && "$path:t" == ${~prefix} ]] || {
+        print -u2 -- "Refusing cleanup of unexpected deployment path: $path"
+        return 1
+    }
+    rm -rf -- "$path"
+}
+
+recover_interrupted_deployment_if_needed() {
+    [[ -e "$target_app" ]] && return 0
+    local orphaned_backups=("${target_app:h}"/.Beta\ Display.previous-*.app(N))
+    (( ${#orphaned_backups} == 0 )) && return 0
+    (( ${#orphaned_backups} == 1 )) || {
+        print -u2 -- "Multiple interrupted deployment backups require manual inspection: ${orphaned_backups[*]}"
+        exit 1
+    }
+    local backup="${orphaned_backups[1]}"
+    require_app "$backup"
+    codesign --verify --deep --strict --verbose=2 "$backup"
+    mv -- "$backup" "$target_app" || {
+        print -u2 -- "Could not restore interrupted deployment backup: $backup"
+        exit 1
+    }
+    print -u2 -- "Restored interrupted deployment backup: $target_app"
 }
 
 terminate_launched_process_for_rollback() {
@@ -186,24 +246,43 @@ rollback_install() {
         return
     fi
     if [[ "$target_moved" == true && -n "$backup_app" && -e "$backup_app" ]]; then
+        [[ "$target_app" == "/Applications/Beta Display.app" ]] || return
         rm -rf -- "$target_app"
         mv -- "$backup_app" "$target_app"
         print -u2 -- "Deployment interrupted; restored previous app"
     elif [[ "$install_committed" == true && -e "$target_app" ]]; then
+        [[ "$target_app" == "/Applications/Beta Display.app" ]] || return
         rm -rf -- "$target_app"
         print -u2 -- "Deployment interrupted; removed incomplete new app"
     fi
-    [[ -n "$staging_app" ]] && rm -rf -- "$staging_app"
+    [[ -n "$staging_app" ]] && remove_owned_path "$staging_app" '.Beta Display.deploying-*.app'
 }
 
-trap rollback_install EXIT
-trap 'rollback_install; exit 1' HUP INT TERM
-
 if [[ "$verify_installed_only" == true ]]; then
-    [[ -n "$source_app" ]] && source_app=${source_app:A}
+    [[ -n "$source_app" ]] || {
+        print -u2 -- "--verify-installed requires --source so it can prove installed provenance"
+        exit 64
+    }
+    source_app=${source_app:A}
     verify_installed_app "$target_app" "$source_app"
     exit 0
 fi
+
+acquire_deployment_lock
+
+cleanup_on_exit() {
+    local exit_status=$?
+    trap - EXIT
+    set +e
+    rollback_install
+    release_deployment_lock
+    exit "$exit_status"
+}
+
+trap cleanup_on_exit EXIT
+trap 'exit 1' HUP INT TERM
+
+recover_interrupted_deployment_if_needed
 
 if [[ -z "$source_app" ]]; then
     source_app="$project_dir/dist/Beta Display.app"
@@ -260,9 +339,11 @@ fi
 }
 
 target_parent=${target_app:h}
-staging_app="$target_parent/.Beta Display.deploying.app"
+deployment_nonce="$$-$RANDOM"
+staging_app="$target_parent/.Beta Display.deploying-$deployment_nonce.app"
+backup_app="$target_parent/.Beta Display.previous-$deployment_nonce.app"
 
-rm -rf -- "$staging_app"
+remove_owned_path "$staging_app" '.Beta Display.deploying-*.app'
 ditto "$source_app" "$staging_app"
 require_app "$staging_app"
 codesign --verify --deep --strict --verbose=2 "$staging_app"
@@ -281,8 +362,10 @@ stage_sha256=$(app_sha256 "$staging_app")
     exit 1
 }
 
-backup_app="$target_parent/.Beta Display.previous.app"
-rm -rf -- "$backup_app"
+[[ ! -e "$backup_app" ]] || {
+    print -u2 -- "Deployment backup path already exists: $backup_app"
+    exit 1
+}
 # Close the small post-quit race: no Beta Display process may appear between
 # the graceful shutdown check and the atomic replacement.
 [[ -z "$(running_beta_display_processes)" ]] || {
@@ -290,11 +373,18 @@ rm -rf -- "$backup_app"
     exit 1
 }
 if [[ -e "$target_app" ]]; then
-    mv -- "$target_app" "$backup_app"
+    # Arm recovery before the move: a signal between `mv` and state assignment
+    # must still put the previous bundle back.
     target_moved=true
+    mv -- "$target_app" "$backup_app"
 fi
 if ! mv -- "$staging_app" "$target_app"; then
-    [[ -e "$backup_app" ]] && mv -- "$backup_app" "$target_app"
+    if [[ -e "$backup_app" ]]; then
+        mv -- "$backup_app" "$target_app" || {
+            print -u2 -- "Install failed and the previous app could not be restored"
+            exit 1
+        }
+    fi
     print -u2 -- "Install failed; previous app was restored"
     exit 1
 fi
@@ -349,10 +439,12 @@ running_command=$(ps -p "$installed_pid" -o comm= | sed 's/^[[:space:]]*//')
     print -u2 -- "Launched process path changed before deployment completed"
     exit 1
 }
+# A successful deployment is committed before backup cleanup. If a signal
+# interrupts cleanup, retaining a backup is safe; deleting the new target is
+# not.
 require_gate "$target_app" "$source_version" "$source_build"
-
-rm -rf -- "$backup_app"
 install_committed=false
 target_moved=false
 launched_pid=""
+remove_owned_path "$backup_app" '.Beta Display.previous-*.app'
 print -- "Installed and verified: $target_app ($source_version build $source_build)"
