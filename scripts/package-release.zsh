@@ -15,7 +15,7 @@ version=""
 mode=""
 
 usage() {
-    print -- "Usage: BETADISPLAY_TESTED_THROUGH_MACOS=26 zsh scripts/package-release.zsh --prepare|--publish [--version VERSION] [--output PATH]"
+    print -- "Usage: BETADISPLAY_TESTED_THROUGH_MACOS=26 zsh scripts/package-release.zsh --prepare|--publish|--resume-draft [--version VERSION] [--output PATH]"
 }
 
 fail() {
@@ -25,7 +25,7 @@ fail() {
 
 while (( $# > 0 )); do
     case "$1" in
-        --prepare|--publish)
+        --prepare|--publish|--resume-draft)
             [[ -z "$mode" ]] || { usage >&2; exit 64; }
             mode="${1#--}"
             shift
@@ -181,18 +181,41 @@ require_tagged_pushed_head() {
     remote_peeled_tag_commit=$(git -C "$project_dir" ls-remote --tags origin "refs/tags/$tag^{}" | awk 'NR == 1 { print $1 }')
     [[ -n "$remote_peeled_tag_commit" ]] && remote_tag_commit="$remote_peeled_tag_commit"
     [[ "$remote_tag_commit" == "$head_commit" ]] || fail "Release tag $tag must be pushed and point at HEAD"
+    print -- "$head_commit"
+}
+
+require_pushed_release_tag() {
+    [[ -z "$(git -C "$project_dir" status --porcelain)" ]] || fail "Draft resumption requires a clean worktree"
+    local head_commit
+    head_commit=$(git -C "$project_dir" rev-parse HEAD)
+    local remote_main_commit
+    remote_main_commit=$(git -C "$project_dir" ls-remote origin refs/heads/main | awk 'NR == 1 { print $1 }')
+    [[ "$remote_main_commit" == "$head_commit" ]] || fail "HEAD must be pushed to origin/main before resuming a draft"
+
+    local local_tag_commit
+    local_tag_commit=$(git -C "$project_dir" rev-parse -q --verify "$tag^{commit}" || true)
+    [[ -n "$local_tag_commit" ]] || fail "Release tag $tag does not exist locally"
+    local remote_tag_commit
+    remote_tag_commit=$(git -C "$project_dir" ls-remote --tags origin "refs/tags/$tag" | awk 'NR == 1 { print $1 }')
+    local remote_peeled_tag_commit
+    remote_peeled_tag_commit=$(git -C "$project_dir" ls-remote --tags origin "refs/tags/$tag^{}" | awk 'NR == 1 { print $1 }')
+    [[ -n "$remote_peeled_tag_commit" ]] && remote_tag_commit="$remote_peeled_tag_commit"
+    [[ "$remote_tag_commit" == "$local_tag_commit" ]] || fail "Release tag $tag must be pushed and match the local tag"
+    git -C "$project_dir" merge-base --is-ancestor "$local_tag_commit" "$head_commit" || fail "Release tag $tag is not an ancestor of HEAD"
+    print -- "$local_tag_commit"
 }
 
 verify_prepared_artifacts() {
+    local release_commit="${1:-HEAD}"
     [[ -f "$manifest" && -f "$arm64_zip" && -f "$x86_64_zip" ]] || fail "Prepared release files are missing; run --prepare from the pushed source commit"
     local source_revision
     source_revision=$(/usr/bin/ruby -rjson -e 'print JSON.parse(File.read(ARGV.fetch(0))).fetch("source_revision")' "$manifest")
     [[ "$source_revision" =~ '^[0-9a-f]{40}$' ]] || fail "Prepared source revision is invalid"
     local head_parent
-    head_parent=$(git -C "$project_dir" rev-parse HEAD^)
+    head_parent=$(git -C "$project_dir" rev-parse "$release_commit^")
     [[ "$source_revision" == "$head_parent" ]] || fail "The release tag must be exactly one Cask-only commit after the prepared source revision"
     local changed_files
-    changed_files=$(git -C "$project_dir" diff --name-only "$source_revision" HEAD)
+    changed_files=$(git -C "$project_dir" diff --name-only "$source_revision" "$release_commit")
     [[ "$changed_files" == "Casks/beta-display.rb" ]] || fail "Only Casks/beta-display.rb may differ between the prepared source revision and release tag"
 
     verify_archive "$arm64_zip"
@@ -211,23 +234,54 @@ abort "Prepared arm64 hash mismatch" unless artifacts.dig("arm64", "sha256") == 
 abort "Prepared x86_64 hash mismatch" unless artifacts.dig("x86_64", "sha256") == x86_64_sha
 RUBY
     render_cask "$cask_expected" "$arm64_sha256" "$x86_64_sha256"
-    cmp -s "$cask_expected" "$cask_repository_path" || fail "Committed Cask does not match the prepared release archives"
+    git -C "$project_dir" show "$release_commit:Casks/beta-display.rb" | cmp -s "$cask_expected" - || fail "Tagged Cask does not match the prepared release archives"
 }
 
-verify_uploaded_assets() {
+release_id_for_tag() {
+    local release_ids
+    release_ids=$(gh api --paginate "repos/$github_release_repo/releases?per_page=100" \
+        --jq ".[] | select(.tag_name == \"$tag\") | .id")
+    [[ -n "$release_ids" ]] || return 1
+
+    local -a release_id_list
+    release_id_list=("${(@f)release_ids}")
+    (( ${#release_id_list[@]} == 1 )) || fail "Expected exactly one release for $tag; found ${#release_id_list[@]}"
+    [[ "${release_id_list[1]}" =~ '^[0-9]+$' ]] || fail "GitHub returned an invalid release ID for $tag"
+    print -- "${release_id_list[1]}"
+}
+
+verify_release_assets() {
+    local release_id="$1"
+    local expected_draft="$2"
     local arm64_sha256
     local x86_64_sha256
     arm64_sha256=$(shasum -a 256 "$arm64_zip" | awk '{print $1}')
     x86_64_sha256=$(shasum -a 256 "$x86_64_zip" | awk '{print $1}')
-    gh api "repos/$github_release_repo/releases/tags/$tag" | /usr/bin/ruby -rjson -e '
+    gh api "repos/$github_release_repo/releases/$release_id" | /usr/bin/ruby -rjson -e '
       release = JSON.parse(STDIN.read)
-      expected = ARGV.each_slice(2).to_h
-      actual = release.fetch("assets").each_with_object({}) { |asset, values| values[asset.fetch("name")] = asset["digest"] }
+      tag, expected_draft, *asset_pairs = ARGV
+      expected = asset_pairs.each_slice(2).to_h.transform_values { |digest| "sha256:#{digest}" }
+      assets = release.fetch("assets")
+      names = assets.map { |asset| asset.fetch("name") }
+      abort "Duplicate uploaded asset names" unless names.uniq.length == names.length
+      actual = assets.to_h { |asset| [asset.fetch("name"), asset["digest"]] }
+      abort "Release tag mismatch" unless release["tag_name"] == tag
+      abort "Release draft state mismatch" unless release["draft"] == (expected_draft == "true")
+      abort "Uploaded asset set mismatch" unless actual.keys.sort == expected.keys.sort
       expected.each do |name, digest|
-        abort "Missing or mismatched uploaded asset: #{name}" unless actual[name] == "sha256:#{digest}"
+        abort "Mismatched uploaded asset: #{name}" unless actual[name] == digest
       end
-      abort "Release is not a draft" unless release["draft"]
-    ' "BetaDisplay-${version}-arm64.zip" "$arm64_sha256" "BetaDisplay-${version}-x86_64.zip" "$x86_64_sha256"
+    ' "$tag" "$expected_draft" "BetaDisplay-${version}-arm64.zip" "$arm64_sha256" "BetaDisplay-${version}-x86_64.zip" "$x86_64_sha256"
+}
+
+publish_verified_draft() {
+    local release_id="$1"
+    gh release edit "$tag" --repo "$github_release_repo" --draft=false --latest --verify-tag
+    verify_release_assets "$release_id" false
+    local published_release_id
+    published_release_id=$(gh api "repos/$github_release_repo/releases/tags/$tag" --jq '.id')
+    [[ "$published_release_id" == "$release_id" ]] || fail "Published tag endpoint does not resolve to the verified release"
+    print -- "Published and verified: $tag in $github_release_repo"
 }
 
 case "$mode" in
@@ -247,21 +301,32 @@ case "$mode" in
         print -- "Next: review and commit only Casks/beta-display.rb; push main; tag that commit as $tag; push the tag; then run --publish."
         ;;
     publish)
-        require_tagged_pushed_head
-        verify_prepared_artifacts
+        release_commit=$(require_tagged_pushed_head)
+        verify_prepared_artifacts "$release_commit"
         command -v gh >/dev/null 2>&1 || fail "GitHub CLI is required to publish release assets"
-        if gh release view "$tag" --repo "$github_release_repo" >/dev/null 2>&1; then
-            fail "Release $tag already exists in $github_release_repo"
+        release_id=""
+        if release_id=$(release_id_for_tag); then
+            verify_release_assets "$release_id" true
+            print -- "Resuming verified draft release $tag (ID $release_id)"
+        else
+            gh release create "$tag" "$arm64_zip" "$x86_64_zip" \
+                --repo "$github_release_repo" \
+                --draft \
+                --verify-tag \
+                --title "Beta Display ${version}" \
+                --notes "Fixes repeated LUT gain compounding after display wake/reconfiguration. Adds a fail-closed runtime deployment gate. Ad-hoc-signed builds for macOS 13 and later; release validation recorded through macOS ${tested_through_macos}."
+            release_id=$(release_id_for_tag) || fail "Created release $tag could not be resolved by ID"
+            verify_release_assets "$release_id" true
         fi
-        gh release create "$tag" "$arm64_zip" "$x86_64_zip" \
-            --repo "$github_release_repo" \
-            --draft \
-            --verify-tag \
-            --title "Beta Display ${version}" \
-            --notes "Fixes repeated LUT gain compounding after display wake/reconfiguration. Adds a fail-closed runtime deployment gate. Ad-hoc-signed builds for macOS 13 and later; release validation recorded through macOS ${tested_through_macos}."
-        verify_uploaded_assets
-        gh release edit "$tag" --repo "$github_release_repo" --draft=false --latest --verify-tag
-        gh api "repos/$github_release_repo/releases/tags/$tag" --jq '.draft' | grep -Fxq false || fail "Release remained a draft"
-        print -- "Published and verified: $tag in $github_release_repo"
+        publish_verified_draft "$release_id"
+        ;;
+    resume-draft)
+        release_commit=$(require_pushed_release_tag)
+        verify_prepared_artifacts "$release_commit"
+        command -v gh >/dev/null 2>&1 || fail "GitHub CLI is required to publish release assets"
+        release_id=$(release_id_for_tag) || fail "No draft release found for $tag"
+        verify_release_assets "$release_id" true
+        print -- "Resuming verified draft release $tag (ID $release_id)"
+        publish_verified_draft "$release_id"
         ;;
 esac
