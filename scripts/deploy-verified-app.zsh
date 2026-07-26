@@ -12,12 +12,14 @@ expected_marker="beta-display-lut-baseline-guard-v2"
 deployment_lock_directory=""
 deployment_lock_owner_file=""
 deployment_lock_held=false
+stale_lock_directory=""
 staging_app=""
 backup_app=""
 install_committed=false
 target_moved=false
 launched_pid=""
 rollback_started=false
+deployment_succeeded=false
 verify_installed_only=false
 
 usage() {
@@ -171,8 +173,32 @@ acquire_deployment_lock() {
     deployment_lock_directory="${target_app:h}/.Beta Display.deploy.lock"
     deployment_lock_owner_file="$deployment_lock_directory/owner-pid"
     if ! mkdir "$deployment_lock_directory" 2>/dev/null; then
-        print -u2 -- "Another deployment is active or an interrupted deployment requires inspection: $deployment_lock_directory"
-        exit 1
+        local recorded_owner=""
+        [[ -d "$deployment_lock_directory" && ! -L "$deployment_lock_directory" && -f "$deployment_lock_owner_file" && ! -L "$deployment_lock_owner_file" ]] \
+            && recorded_owner=$(<"$deployment_lock_owner_file")
+        [[ "$recorded_owner" == <-> ]] || {
+            print -u2 -- "Deployment lock requires manual inspection: $deployment_lock_directory"
+            exit 1
+        }
+        if kill -0 "$recorded_owner" 2>/dev/null; then
+            print -u2 -- "Another deployment is active (PID $recorded_owner)"
+            exit 1
+        fi
+        local unexpected_entries
+        unexpected_entries=$(command ls -A "$deployment_lock_directory" | grep -v -x 'owner-pid' || true)
+        [[ -z "$unexpected_entries" ]] || {
+            print -u2 -- "Stale deployment lock contains unexpected entries: $deployment_lock_directory"
+            exit 1
+        }
+        stale_lock_directory="${target_app:h}/.Beta Display.deploy.stale-$$-$RANDOM.lock"
+        mv -- "$deployment_lock_directory" "$stale_lock_directory" 2>/dev/null || {
+            print -u2 -- "Deployment lock changed while being inspected; refusing deployment"
+            exit 1
+        }
+        mkdir "$deployment_lock_directory" 2>/dev/null || {
+            print -u2 -- "Another deployment acquired the lock"
+            exit 1
+        }
     fi
     deployment_lock_held=true
     if ! print -r -- "$$" > "$deployment_lock_owner_file"; then
@@ -197,6 +223,11 @@ release_deployment_lock() {
         return 0
     }
     deployment_lock_held=false
+    if [[ -n "$stale_lock_directory" && -d "$stale_lock_directory" && ! -L "$stale_lock_directory" ]]; then
+        local stale_owner_file="$stale_lock_directory/owner-pid"
+        [[ -f "$stale_owner_file" && ! -L "$stale_owner_file" ]] && rm -f -- "$stale_owner_file"
+        rmdir "$stale_lock_directory" 2>/dev/null || print -u2 -- "Retained stale lock for inspection: $stale_lock_directory"
+    fi
 }
 
 remove_owned_path() {
@@ -241,6 +272,10 @@ terminate_launched_process_for_rollback() {
 rollback_install() {
     [[ "$rollback_started" == false ]] || return
     rollback_started=true
+    if [[ "$deployment_succeeded" == true ]]; then
+        [[ -n "$staging_app" ]] && remove_owned_path "$staging_app" '.Beta Display.deploying-*.app'
+        return
+    fi
     if [[ -n "$launched_pid" ]] && ! terminate_launched_process_for_rollback; then
         print -u2 -- "Deployment interrupted; retained the verified new app because its launched process is still running"
         return
@@ -268,8 +303,6 @@ if [[ "$verify_installed_only" == true ]]; then
     exit 0
 fi
 
-acquire_deployment_lock
-
 cleanup_on_exit() {
     local exit_status=$?
     trap - EXIT
@@ -282,6 +315,7 @@ cleanup_on_exit() {
 trap cleanup_on_exit EXIT
 trap 'exit 1' HUP INT TERM
 
+acquire_deployment_lock
 recover_interrupted_deployment_if_needed
 
 if [[ -z "$source_app" ]]; then
@@ -443,6 +477,7 @@ running_command=$(ps -p "$installed_pid" -o comm= | sed 's/^[[:space:]]*//')
 # interrupts cleanup, retaining a backup is safe; deleting the new target is
 # not.
 require_gate "$target_app" "$source_version" "$source_build"
+deployment_succeeded=true
 install_committed=false
 target_moved=false
 launched_pid=""
