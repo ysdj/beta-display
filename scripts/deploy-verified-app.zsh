@@ -256,6 +256,14 @@ running_command=$(ps -p "$installed_pid" -o comm= | sed 's/^[[:space:]]*//')
     print -u2 -- "Launched process does not match the installed app"
     exit 1
 }
+# A short observation window avoids treating a process that immediately exits
+# (for example, due to a stale instance lock or launch-time self-test failure)
+# as a successful deployment.
+sleep 0.5
+kill -0 "$installed_pid" 2>/dev/null || {
+    print -u2 -- "Installed Beta Display exited immediately after launch"
+    exit 1
+}
 require_gate "$target_app" "$source_version" "$source_build"
 
 rm -rf -- "$backup_app"
