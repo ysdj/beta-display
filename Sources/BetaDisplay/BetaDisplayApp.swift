@@ -3,8 +3,17 @@ import Darwin
 
 @main
 struct BetaDisplayMain {
+    private static let deploymentGateMarker = "beta-display-lut-baseline-guard-v2"
+
     @MainActor
     static func main() {
+        if CommandLine.arguments.contains("--deployment-gate") {
+            let bundle = Bundle.main
+            let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+            let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
+            print("BetaDisplay deployment-gate \(deploymentGateMarker) \(version) \(build)")
+            return
+        }
         if CommandLine.arguments.contains("--live-lut-test") {
             let failures = BetaDisplayLiveLUTTest.run()
             guard !failures.isEmpty else {

@@ -73,6 +73,20 @@ zsh scripts/build-app.zsh
 open "dist/Beta Display.app"
 ```
 
+### Runtime deployment gate
+
+Do not treat a successful source build as proof that the running app is fixed.
+When a change affects display recovery, install it only through:
+
+```sh
+zsh scripts/deploy-verified-app.zsh
+```
+
+The gate requests a normal shutdown of the existing app, verifies the source,
+staged, and installed bundles (signature, self-test, version/build, checksum,
+and recovery marker), then starts and verifies the exact app under
+`/Applications/Beta Display.app`. It fails closed if any step is inconsistent.
+
 </details>
 
 ---
@@ -151,5 +165,15 @@ brew untap ysdj/beta-display
 zsh scripts/build-app.zsh
 open "dist/Beta Display.app"
 ```
+
+### 运行中应用部署门禁
+
+源码构建成功不代表正在运行的应用已经修复。凡是涉及显示器恢复逻辑的改动，只能通过以下命令安装：
+
+```sh
+zsh scripts/deploy-verified-app.zsh
+```
+
+该门禁会先请求旧应用正常退出，再验证源包、暂存包和安装包的签名、自检、版本/构建号、校验和与恢复标记；最后启动并核验准确的 `/Applications/Beta Display.app`。任何一步不一致都会失败，不会把未验证版本当作已部署。
 
 </details>

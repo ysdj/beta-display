@@ -151,6 +151,24 @@ enum BetaDisplaySelfTest {
             failures.append(L10n.text("self_test.lut"))
         }
 
+        // This is the reported path: global gain 0.20 must always compose
+        // from the same clean baseline, never from a prior recovery result.
+        var globalReducedGain = ColorAdjustments.neutral
+        globalReducedGain.gain = 0.2
+        let firstGlobalGainLUT = DisplayLUT(base: lut, adjustments: globalReducedGain)
+        for _ in 0 ..< 12 {
+            let recoveredLUT = DisplayLUT(base: lut, adjustments: globalReducedGain)
+            if !recoveredLUT.approximatelyMatches(firstGlobalGainLUT, tolerance: 0.000_01) {
+                failures.append(L10n.text("self_test.lut"))
+                break
+            }
+        }
+        let compoundedGlobalGainLUT = DisplayLUT(base: firstGlobalGainLUT, adjustments: globalReducedGain)
+        if abs(Double(firstGlobalGainLUT.red.last ?? 0) - 0.64) >= 0.000_01
+            || abs(Double(compoundedGlobalGainLUT.red.last ?? 0) - 0.4096) >= 0.000_01 {
+            failures.append(L10n.text("self_test.lut"))
+        }
+
         // The clean baseline must survive an unclean process restart and be
         // removed only after a successful restore.
         let suiteName = "BetaDisplay.self-test.\(UUID().uuidString)"
