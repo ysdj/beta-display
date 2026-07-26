@@ -95,6 +95,7 @@ require_self_test() {
 
 verify_installed_app() {
     local app="$1"
+    local reference_app="${2:-}"
     require_app "$app"
     codesign --verify --deep --strict --verbose=2 "$app"
     local identifier
@@ -109,6 +110,26 @@ verify_installed_app() {
     }
     require_gate "$app" "$version" "$build"
     require_self_test "$app"
+    if [[ -n "$reference_app" ]]; then
+        require_app "$reference_app"
+        codesign --verify --deep --strict --verbose=2 "$reference_app"
+        local reference_identifier
+        reference_identifier=$(plist_value "$reference_app" CFBundleIdentifier)
+        local reference_version
+        reference_version=$(plist_value "$reference_app" CFBundleShortVersionString)
+        local reference_build
+        reference_build=$(plist_value "$reference_app" CFBundleVersion)
+        local reference_sha256
+        reference_sha256=$(app_sha256 "$reference_app")
+        [[ "$identifier" == "$reference_identifier" && "$version" == "$reference_version" && "$build" == "$reference_build" ]] || {
+            print -u2 -- "Installed bundle metadata differs from the reference app"
+            exit 1
+        }
+        [[ "$(app_sha256 "$app")" == "$reference_sha256" ]] || {
+            print -u2 -- "Installed binary checksum differs from the reference app"
+            exit 1
+        }
+    fi
     print -- "Installed bundle verified: $app ($version build $build)"
 }
 
@@ -179,7 +200,8 @@ trap rollback_install EXIT
 trap 'rollback_install; exit 1' HUP INT TERM
 
 if [[ "$verify_installed_only" == true ]]; then
-    verify_installed_app "$target_app"
+    [[ -n "$source_app" ]] && source_app=${source_app:A}
+    verify_installed_app "$target_app" "$source_app"
     exit 0
 fi
 
