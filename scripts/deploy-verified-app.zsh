@@ -13,9 +13,12 @@ staging_app=""
 backup_app=""
 install_committed=false
 target_moved=false
+launched_pid=""
+rollback_started=false
+verify_installed_only=false
 
 usage() {
-    print -- "Usage: zsh scripts/deploy-verified-app.zsh [--source APP] [--target APP]"
+    print -- "Usage: zsh scripts/deploy-verified-app.zsh [--source APP] [--target APP] [--verify-installed]"
 }
 
 while (( $# > 0 )); do
@@ -27,6 +30,10 @@ while (( $# > 0 )); do
         --target)
             target_app="${2:?missing app after --target}"
             shift 2
+            ;;
+        --verify-installed)
+            verify_installed_only=true
+            shift
             ;;
         --help|-h)
             usage
@@ -40,12 +47,6 @@ while (( $# > 0 )); do
     esac
 done
 
-if [[ -z "$source_app" ]]; then
-    source_app="$project_dir/dist/Beta Display.app"
-    zsh "$project_dir/scripts/build-app.zsh" --output "$source_app" --identity -
-fi
-
-source_app=${source_app:A}
 target_app=${target_app:A}
 [[ "$target_app" == "/Applications/Beta Display.app" ]] || {
     print -u2 -- "Refusing non-default target: $target_app"
@@ -92,6 +93,25 @@ require_self_test() {
     }
 }
 
+verify_installed_app() {
+    local app="$1"
+    require_app "$app"
+    codesign --verify --deep --strict --verbose=2 "$app"
+    local identifier
+    identifier=$(plist_value "$app" CFBundleIdentifier)
+    local version
+    version=$(plist_value "$app" CFBundleShortVersionString)
+    local build
+    build=$(plist_value "$app" CFBundleVersion)
+    [[ "$identifier" == "io.github.ysdj.betadisplay" ]] || {
+        print -u2 -- "Unexpected installed bundle identifier: $identifier"
+        exit 1
+    }
+    require_gate "$app" "$version" "$build"
+    require_self_test "$app"
+    print -- "Installed bundle verified: $app ($version build $build)"
+}
+
 app_sha256() {
     local app="$1"
     shasum -a 256 "$app/Contents/MacOS/BetaDisplay" | awk '{print $1}'
@@ -121,21 +141,53 @@ running_beta_display_pids() {
     running_beta_display_processes | awk -F "\t" '{ print $1 }'
 }
 
+running_target_pids() {
+    local executable_path="$1"
+    running_beta_display_processes | awk -F "\t" -v path="$executable_path" '$2 == path { print $1 }'
+}
+
+terminate_launched_process_for_rollback() {
+    [[ -n "$launched_pid" ]] || return 0
+    kill -0 "$launched_pid" 2>/dev/null || return 0
+    osascript -e 'tell application id "io.github.ysdj.betadisplay" to quit' || true
+    for _ in {1..50}; do
+        kill -0 "$launched_pid" 2>/dev/null || return 0
+        sleep 0.1
+    done
+    return 1
+}
+
 rollback_install() {
-    if [[ "$install_committed" == true ]]; then
-        if [[ "$target_moved" == true && -n "$backup_app" && -e "$backup_app" ]]; then
-            rm -rf -- "$target_app"
-            mv -- "$backup_app" "$target_app"
-            print -u2 -- "Deployment interrupted; restored previous app"
-        elif [[ -e "$target_app" ]]; then
-            rm -rf -- "$target_app"
-            print -u2 -- "Deployment interrupted; removed incomplete new app"
-        fi
+    [[ "$rollback_started" == false ]] || return
+    rollback_started=true
+    if [[ -n "$launched_pid" ]] && ! terminate_launched_process_for_rollback; then
+        print -u2 -- "Deployment interrupted; retained the verified new app because its launched process is still running"
+        return
+    fi
+    if [[ "$target_moved" == true && -n "$backup_app" && -e "$backup_app" ]]; then
+        rm -rf -- "$target_app"
+        mv -- "$backup_app" "$target_app"
+        print -u2 -- "Deployment interrupted; restored previous app"
+    elif [[ "$install_committed" == true && -e "$target_app" ]]; then
+        rm -rf -- "$target_app"
+        print -u2 -- "Deployment interrupted; removed incomplete new app"
     fi
     [[ -n "$staging_app" ]] && rm -rf -- "$staging_app"
 }
 
-trap rollback_install EXIT HUP INT TERM
+trap rollback_install EXIT
+trap 'rollback_install; exit 1' HUP INT TERM
+
+if [[ "$verify_installed_only" == true ]]; then
+    verify_installed_app "$target_app"
+    exit 0
+fi
+
+if [[ -z "$source_app" ]]; then
+    source_app="$project_dir/dist/Beta Display.app"
+    zsh "$project_dir/scripts/build-app.zsh" --output "$source_app" --identity -
+fi
+source_app=${source_app:A}
 
 require_app "$source_app"
 codesign --verify --deep --strict --verbose=2 "$source_app"
@@ -209,6 +261,12 @@ stage_sha256=$(app_sha256 "$staging_app")
 
 backup_app="$target_parent/.Beta Display.previous.app"
 rm -rf -- "$backup_app"
+# Close the small post-quit race: no Beta Display process may appear between
+# the graceful shutdown check and the atomic replacement.
+[[ -z "$(running_beta_display_processes)" ]] || {
+    print -u2 -- "Beta Display restarted before replacement; refusing installation"
+    exit 1
+}
 if [[ -e "$target_app" ]]; then
     mv -- "$target_app" "$backup_app"
     target_moved=true
@@ -237,10 +295,10 @@ installed_sha256=$(app_sha256 "$target_app")
     exit 1
 }
 
-# Avoid `open` here: LaunchServices may race an atomic app replacement and
-# activate an executable image that started before the move. Starting the
-# verified target directly gives the gate an unambiguous process path.
-"$target_app/Contents/MacOS/BetaDisplay" >/dev/null 2>&1 &
+# Start the already-verified executable without the deployment terminal as its
+# parent. `nohup` keeps a shell HUP from terminating it; its executable path is
+# then checked directly against the installed target.
+/usr/bin/nohup "$target_app/Contents/MacOS/BetaDisplay" </dev/null >/dev/null 2>&1 &
 launched_pid=$!
 for _ in {1..50}; do
     installed_pid=$(ps -p "$launched_pid" -o pid= 2>/dev/null | tr -d '[:space:]')
@@ -259,9 +317,14 @@ running_command=$(ps -p "$installed_pid" -o comm= | sed 's/^[[:space:]]*//')
 # A short observation window avoids treating a process that immediately exits
 # (for example, due to a stale instance lock or launch-time self-test failure)
 # as a successful deployment.
-sleep 0.5
+sleep 1
 kill -0 "$installed_pid" 2>/dev/null || {
     print -u2 -- "Installed Beta Display exited immediately after launch"
+    exit 1
+}
+running_command=$(ps -p "$installed_pid" -o comm= | sed 's/^[[:space:]]*//')
+[[ "$running_command" == "$target_app/Contents/MacOS/BetaDisplay" ]] || {
+    print -u2 -- "Launched process path changed before deployment completed"
     exit 1
 }
 require_gate "$target_app" "$source_version" "$source_build"
@@ -269,4 +332,5 @@ require_gate "$target_app" "$source_version" "$source_build"
 rm -rf -- "$backup_app"
 install_committed=false
 target_moved=false
+launched_pid=""
 print -- "Installed and verified: $target_app ($source_version build $source_build)"
