@@ -104,16 +104,21 @@ exit(Gem::Version.new(candidate) > Gem::Version.new(current) ? 0 : 1)
 RUBY
 }
 
-running_beta_display_pids() {
-    # Inspect only the executable path. Matching the full command line would
-    # also match this script's own awk pattern and falsely block deployment.
+running_beta_display_processes() {
+    # Use both PID and executable path. This preserves the identity of the
+    # app we asked to quit, rather than accepting a stale process whose path
+    # looks the same after /Applications/Beta Display.app is atomically moved.
     ps -ax -o pid= -o comm= | awk '
         {
             pid = $1
             sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", $0)
-            if ($0 ~ /\/Contents\/MacOS\/BetaDisplay$/) print pid
+            if ($0 ~ /\/Contents\/MacOS\/BetaDisplay$/) print pid "\t" $0
         }
     '
+}
+
+running_beta_display_pids() {
+    running_beta_display_processes | awk -F "\t" '{ print $1 }'
 }
 
 rollback_install() {
@@ -161,14 +166,21 @@ if [[ -e "$target_app/Contents/Info.plist" ]]; then
 fi
 
 # Request normal application termination first so its LUT/session restore runs.
-if [[ -n "$(running_beta_display_pids)" ]]; then
+old_processes=$(running_beta_display_processes)
+if [[ -n "$old_processes" ]]; then
     osascript -e 'tell application id "io.github.ysdj.betadisplay" to quit' || true
     for _ in {1..50}; do
-        [[ -z "$(running_beta_display_pids)" ]] && break
+        active_old_processes=""
+        while IFS=$'\t' read -r old_pid old_path; do
+            [[ -z "$old_pid" ]] && continue
+            current_path=$(ps -p "$old_pid" -o comm= 2>/dev/null | sed 's/^[[:space:]]*//')
+            [[ "$current_path" == "$old_path" ]] && active_old_processes+="$old_pid"$'\n'
+        done <<< "$old_processes"
+        [[ -z "$active_old_processes" ]] && break
         sleep 0.1
     done
 fi
-[[ -z "$(running_beta_display_pids)" ]] || {
+[[ -z "${active_old_processes:-}" ]] || {
     print -u2 -- "Beta Display did not exit gracefully; refusing installation"
     exit 1
 }
@@ -225,15 +237,13 @@ installed_sha256=$(app_sha256 "$target_app")
     exit 1
 }
 
-open "$target_app"
+# Avoid `open` here: LaunchServices may race an atomic app replacement and
+# activate an executable image that started before the move. Starting the
+# verified target directly gives the gate an unambiguous process path.
+"$target_app/Contents/MacOS/BetaDisplay" >/dev/null 2>&1 &
+launched_pid=$!
 for _ in {1..50}; do
-    installed_pid=$(ps -ax -o pid= -o comm= | awk -v path="$target_app/Contents/MacOS/BetaDisplay" '
-        {
-            pid = $1
-            sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", $0)
-            if ($0 == path) { print pid; exit }
-        }
-    ')
+    installed_pid=$(ps -p "$launched_pid" -o pid= 2>/dev/null | tr -d '[:space:]')
     [[ -n "$installed_pid" ]] && break
     sleep 0.1
 done
