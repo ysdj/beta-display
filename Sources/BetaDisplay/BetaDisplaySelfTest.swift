@@ -201,6 +201,14 @@ enum BetaDisplaySelfTest {
             || AppMetadata.isVersion("v1.1.1", newerThan: "1.1.2") {
             failures.append(L10n.text("self_test.version_comparison"))
         }
+        let resolutionChange: CGDisplayChangeSummaryFlags = [
+            .setModeFlag,
+            .desktopShapeChangedFlag
+        ]
+        if DisplayRecoveryCoordinator.shouldRestoreTopology(for: resolutionChange)
+            || !DisplayRecoveryCoordinator.shouldRestoreTopology(for: .addFlag) {
+            failures.append(L10n.text("self_test.resolution_not_locked"))
+        }
         return failures
     }
 }

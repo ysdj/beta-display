@@ -19,7 +19,6 @@ struct PersistedDisplayConfiguration: Codable, Equatable, Sendable {
     var framebufferMode: Int32?
     var ditheringEnabled: Bool?
     var uniformityCorrectionEnabled: Bool?
-    var displayModeID: String?
     var originX: Int?
     var originY: Int?
     var mirror: PersistedMirrorConfiguration?
@@ -30,7 +29,6 @@ struct PersistedDisplayConfiguration: Codable, Equatable, Sendable {
         framebufferMode: Int32? = nil,
         ditheringEnabled: Bool? = nil,
         uniformityCorrectionEnabled: Bool? = nil,
-        displayModeID: String? = nil,
         originX: Int? = nil,
         originY: Int? = nil,
         mirror: PersistedMirrorConfiguration? = nil
@@ -40,7 +38,6 @@ struct PersistedDisplayConfiguration: Codable, Equatable, Sendable {
         self.framebufferMode = framebufferMode
         self.ditheringEnabled = ditheringEnabled
         self.uniformityCorrectionEnabled = uniformityCorrectionEnabled
-        self.displayModeID = displayModeID
         self.originX = originX
         self.originY = originY
         self.mirror = mirror

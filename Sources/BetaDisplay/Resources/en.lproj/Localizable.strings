@@ -239,3 +239,4 @@
 "self_test.group" = "Display group model did not retain its members";
 "self_test.rgb_gain_safety" = "RGB gain safety did not preserve a visible channel";
 "self_test.version_comparison" = "Update version comparison failed";
+"self_test.resolution_not_locked" = "Display recovery attempted to restore an externally changed resolution";

@@ -69,7 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     init(singleInstanceController: SingleInstanceController) {
         self.singleInstanceController = singleInstanceController
         displayController = DisplayController(configurationStore: configurationStore)
-        modeController = DisplayModeController(configurationStore: configurationStore)
+        modeController = DisplayModeController()
         layoutController = DisplayLayoutController(configurationStore: configurationStore)
         framebufferController = FramebufferController(configurationStore: configurationStore)
         colorProfileController = ColorProfileController(configurationStore: configurationStore)
@@ -283,9 +283,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applySavedDisplayConfiguration() {
         displayController.captureSessionState()
-        modeController.applySavedModes(to: displayController.displays.map(\.id))
-        displayController.refreshDisplays()
-        displayController.captureSessionState()
         layoutController.applySavedLayout(to: displayController.displays.map(\.id))
         displayController.refreshDisplays()
         displayController.captureSessionState()
@@ -305,8 +302,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !displayController.displays.isEmpty else { return }
 
         if restoresTopology {
-            modeController.applySavedModes(to: displayController.displays.map(\.id))
-            displayController.refreshDisplays()
             layoutController.applySavedLayout(to: displayController.displays.map(\.id))
             displayController.refreshDisplays()
         }

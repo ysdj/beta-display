@@ -72,17 +72,19 @@ final class DisplayRecoveryCoordinator {
               !flags.contains(.beginConfigurationFlag),
               Date() >= ignoreReconfigurationUntil
         else { return }
-        let topologyFlags: CGDisplayChangeSummaryFlags = [
+        scheduleRecovery(restoresTopology: Self.shouldRestoreTopology(for: flags))
+    }
+
+    static func shouldRestoreTopology(for flags: CGDisplayChangeSummaryFlags) -> Bool {
+        let connectionOrMirroringFlags: CGDisplayChangeSummaryFlags = [
             .addFlag,
             .removeFlag,
             .enabledFlag,
             .disabledFlag,
-            .setModeFlag,
             .mirrorFlag,
-            .unMirrorFlag,
-            .desktopShapeChangedFlag
+            .unMirrorFlag
         ]
-        scheduleRecovery(restoresTopology: !flags.intersection(topologyFlags).isEmpty)
+        return !flags.intersection(connectionOrMirroringFlags).isEmpty
     }
 
     private func scheduleRecovery(restoresTopology: Bool) {

@@ -31,15 +31,10 @@ struct DisplayModeDescriptor: Identifiable, Hashable {
 
 @MainActor
 final class DisplayModeController {
-    private let configurationStore: DisplayConfigurationStore
     private(set) var modes: [DisplayModeDescriptor] = []
     private(set) var currentModeID: String?
     private(set) var statusMessage = L10n.text("status.choose_display_for_modes")
     var onStateChanged: (() -> Void)?
-
-    init(configurationStore: DisplayConfigurationStore) {
-        self.configurationStore = configurationStore
-    }
 
     func refresh(for displayID: CGDirectDisplayID?) {
         guard let displayID else {
@@ -80,42 +75,12 @@ final class DisplayModeController {
         }
         let result = CGDisplaySetDisplayMode(displayID, mode.mode, nil)
         if result == .success {
-            configurationStore.update(for: displayID) { $0.displayModeID = modeID }
             statusMessage = L10n.text("status.mode_applied", mode.title)
             refresh(for: displayID)
         } else {
             statusMessage = L10n.text("status.cannot_switch_mode", result.rawValue)
             publish()
         }
-    }
-
-    func applySavedModes(to displayIDs: [CGDirectDisplayID]) {
-        for displayID in displayIDs {
-            refresh(for: displayID)
-            guard let savedModeID = configurationStore.configuration(for: displayID)?.displayModeID,
-                  let mode = resolvedSavedMode(savedModeID)
-            else { continue }
-            apply(modeID: mode.id, to: displayID)
-        }
-    }
-
-    private func resolvedSavedMode(_ identifier: String) -> DisplayModeDescriptor? {
-        if let exact = modes.first(where: { $0.id == identifier }) {
-            return exact
-        }
-        let parts = identifier.split(separator: "-")
-        guard let dimensions = parts.first?.split(separator: "x"),
-              dimensions.count == 2,
-              let width = Int(dimensions[0]),
-              let height = Int(dimensions[1])
-        else { return nil }
-        return modes
-            .filter { $0.width == width && $0.height == height }
-            .sorted {
-                if $0.isHiDPI != $1.isHiDPI { return $0.isHiDPI }
-                return $0.refreshRate > $1.refreshRate
-            }
-            .first
     }
 
     private func publish() {

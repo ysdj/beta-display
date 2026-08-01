@@ -239,3 +239,4 @@
 "self_test.group" = "显示器群组模型未保留成员";
 "self_test.rgb_gain_safety" = "RGB 增益保护未保留可见通道";
 "self_test.version_comparison" = "更新版本比较失败";
+"self_test.resolution_not_locked" = "显示恢复错误地尝试还原外部更改的分辨率";

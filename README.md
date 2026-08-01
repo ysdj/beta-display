@@ -45,6 +45,7 @@ brew install --cask beta-display
 - Copyable display diagnostics
 
 Controls appear only when macOS and the selected display expose the required capability. Resolution, layout, mirroring, and image changes affect the display immediately.
+Resolution changes are applied on demand and are never saved or restored automatically.
 
 ## Updates
 
@@ -138,6 +139,7 @@ brew install --cask beta-display
 - 查看并复制显示器诊断信息
 
 部分控制项只会在 macOS 和当前显示器公开相应能力时出现。更改分辨率、布局、镜像或图像参数会立即影响显示输出。
+分辨率仅按当次操作更改，Beta Display 不会保存或自动还原分辨率。
 
 ## 检查更新
 
