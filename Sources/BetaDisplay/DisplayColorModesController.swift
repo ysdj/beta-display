@@ -53,6 +53,10 @@ final class DisplayColorModesController {
     private let trueToneClient: NSObject?
     private(set) var state = State()
     private(set) var actionError = ""
+    private var initialState: State?
+    private var didModifyNightShift = false
+    private var didModifyNightShiftStrength = false
+    private var didModifyTrueTone = false
     var onStateChanged: (() -> Void)?
 
     init() {
@@ -70,6 +74,16 @@ final class DisplayColorModesController {
         } else {
             trueToneClient = nil
         }
+    }
+
+    /// Captures the system-wide color-mode state that existed before Beta
+    /// Display changes it. Night Shift and True Tone are macOS settings, not
+    /// app preferences, so their baseline stays in memory for this process.
+    func captureInitialState() {
+        guard initialState == nil else { return }
+        let current = readState()
+        initialState = current
+        state = current
     }
 
     var statusText: String {
@@ -97,6 +111,7 @@ final class DisplayColorModesController {
 
     @discardableResult
     func setNightShift(_ enabled: Bool) -> Bool {
+        captureInitialState()
         guard let client = blueLightClient,
               state.nightShiftSupported
         else {
@@ -111,12 +126,14 @@ final class DisplayColorModesController {
             return false
         }
         actionError = ""
+        didModifyNightShift = initialState?.nightShiftEnabled != enabled
         if !refresh() { onStateChanged?() }
         return true
     }
 
     @discardableResult
     func setNightShiftStrength(_ strength: Double) -> Bool {
+        captureInitialState()
         guard let client = blueLightClient, state.nightShiftSupported else {
             actionError = L10n.text("system_modes.night_shift_unavailable")
             onStateChanged?()
@@ -137,12 +154,17 @@ final class DisplayColorModesController {
             return false
         }
         actionError = ""
+        didModifyNightShiftStrength = initialState.map {
+            guard let initialStrength = $0.nightShiftStrength else { return false }
+            return abs(initialStrength - strength.clamped(to: 0 ... 1)) > 0.000_5
+        } ?? false
         if !refresh() { onStateChanged?() }
         return true
     }
 
     @discardableResult
     func setTrueTone(_ enabled: Bool) -> Bool {
+        captureInitialState()
         guard let client = trueToneClient,
               callBool(client, selector: "supported") == true,
               callBool(client, selector: "available") == true,
@@ -155,8 +177,30 @@ final class DisplayColorModesController {
             return false
         }
         actionError = ""
+        didModifyTrueTone = initialState?.trueToneEnabled != enabled
         if !refresh() { onStateChanged?() }
         return true
+    }
+
+    /// Restores only switches Beta Display successfully changed. This avoids
+    /// overwriting a system setting the app merely observed during the session.
+    func restoreInitialState() {
+        guard let initialState else { return }
+        if didModifyNightShiftStrength,
+           let strength = initialState.nightShiftStrength {
+            _ = setNightShiftStrengthSilently(strength)
+        }
+        if didModifyNightShift,
+           let enabled = initialState.nightShiftEnabled {
+            _ = setNightShiftSilently(enabled)
+        }
+        if didModifyTrueTone,
+           let enabled = initialState.trueToneEnabled {
+            _ = setTrueToneSilently(enabled)
+        }
+        actionError = ""
+        state = readState()
+        onStateChanged?()
     }
 
     private func readState() -> State {
@@ -176,6 +220,31 @@ final class DisplayColorModesController {
             next.trueToneEnabled = callBool(client, selector: "enabled")
         }
         return next
+    }
+
+    private func setNightShiftSilently(_ enabled: Bool) -> Bool {
+        guard let client = blueLightClient,
+              callBool(client, selector: "supported") == true
+        else { return false }
+        return callBool(client, selector: "setEnabled:", value: enabled)
+    }
+
+    private func setNightShiftStrengthSilently(_ strength: Double) -> Bool {
+        guard let client = blueLightClient else { return false }
+        let selector = NSSelectorFromString("setStrength:commit:")
+        guard client.responds(to: selector),
+              let implementation = client.method(for: selector)
+        else { return false }
+        let setter = unsafeBitCast(implementation, to: FloatCommit.self)
+        return setter(client, selector, Float(strength.clamped(to: 0 ... 1)), true)
+    }
+
+    private func setTrueToneSilently(_ enabled: Bool) -> Bool {
+        guard let client = trueToneClient,
+              callBool(client, selector: "supported") == true,
+              callBool(client, selector: "available") == true
+        else { return false }
+        return callBool(client, selector: "setEnabled:", value: enabled)
     }
 
     private func readBlueLightStatus(from client: NSObject) -> BlueLightStatus? {

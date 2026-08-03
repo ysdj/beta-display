@@ -283,6 +283,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applySavedDisplayConfiguration() {
         displayController.captureSessionState()
+        let initialDisplayIDs = displayController.displays.map(\.id)
+        modeController.captureInitialModes(for: initialDisplayIDs)
+        layoutController.captureInitialLayout(for: initialDisplayIDs)
+        colorProfileController.captureInitialProfiles(for: initialDisplayIDs)
+        framebufferController.captureInitialStates(for: initialDisplayIDs)
+        colorModesController.captureInitialState()
         layoutController.applySavedLayout(to: displayController.displays.map(\.id))
         displayController.refreshDisplays()
         displayController.captureSessionState()
@@ -300,6 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func restoreDisplayStateAfterSystemChange(restoresTopology: Bool) {
         displayController.refreshDisplays()
         guard !displayController.displays.isEmpty else { return }
+        displayController.captureSessionState()
 
         if restoresTopology {
             layoutController.applySavedLayout(to: displayController.displays.map(\.id))
@@ -327,8 +334,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func restoreProcessEffectsOnce() {
         guard !restoredProcessEffects else { return }
         restoredProcessEffects = true
+        layoutController.restoreInitialLayout()
+        modeController.restoreInitialModes()
         framebufferController.restoreAllInitialStates()
         colorProfileController.restoreAllInitialProfiles()
         displayController.restoreSessionState()
+        colorModesController.restoreInitialState()
     }
 }

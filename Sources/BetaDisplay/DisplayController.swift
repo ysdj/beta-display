@@ -23,6 +23,9 @@ final class DisplayController {
     private(set) var imageStatusRegion = ImageStatusRegion.adjustments
     var onStateChanged: (() -> Void)?
     private var sessionOriginalLUTs: [String: DisplayLUT] = [:]
+    private var sessionOriginalHardwareBrightness: [String: Double] = [:]
+    private var modifiedLUTSessionKeys: Set<String> = []
+    private var changedHardwareBrightness: Set<String> = []
     private var workingBaseLUTs: [String: DisplayLUT] = [:]
     private let lutRecoveryStore = DisplayLUTRecoveryStore()
     private var applyWorkItem: DispatchWorkItem?
@@ -172,11 +175,28 @@ final class DisplayController {
     }
 
     func setHardwareBrightness(_ value: Double) {
+        guard let selectedDisplayID else {
+            publishState()
+            return
+        }
+        let sessionKey = DisplayIdentity.sessionKey(for: selectedDisplayID)
+        let currentValue = hardwareBrightness.value(for: selectedDisplayID)
+        if sessionOriginalHardwareBrightness[sessionKey] == nil,
+           let currentValue {
+            sessionOriginalHardwareBrightness[sessionKey] = currentValue
+        }
         guard hardwareBrightness.setValue(value, for: selectedDisplayID) else {
             publishState()
             return
         }
-        hardwareBrightnessValue = value.clamped(to: 0 ... 1)
+        let appliedValue = value.clamped(to: 0 ... 1)
+        hardwareBrightnessValue = appliedValue
+        if let initialValue = sessionOriginalHardwareBrightness[sessionKey],
+           abs(appliedValue - initialValue) <= 0.000_5 {
+            changedHardwareBrightness.remove(sessionKey)
+        } else if currentValue != nil {
+            changedHardwareBrightness.insert(sessionKey)
+        }
         publishState()
     }
 
@@ -191,11 +211,15 @@ final class DisplayController {
         }
     }
 
-    /// Restores only the display tables captured by this process. Used on quit
-    /// so this app does not reset color tables managed by another app.
+    /// Captures the display tables and hardware brightness observed at process
+    /// startup. Values are retained only for this app session.
     func captureSessionState() {
         for display in displays {
             let sessionKey = DisplayIdentity.sessionKey(for: display.id)
+            if sessionOriginalHardwareBrightness[sessionKey] == nil,
+               let brightness = hardwareBrightness.value(for: display.id) {
+                sessionOriginalHardwareBrightness[sessionKey] = brightness
+            }
             guard sessionOriginalLUTs[sessionKey] == nil else { continue }
             let baseline = lutRecoveryStore.baseline(for: display.id)
                 ?? readCurrentLUT(for: display.id, reportsErrors: false)
@@ -237,6 +261,9 @@ final class DisplayController {
             return changed
         }
         let changed = change()
+        if changed {
+            modifiedLUTSessionKeys.insert(sessionKey)
+        }
         if changed,
            let newBase = readCurrentLUT(for: displayID, reportsErrors: false) {
             workingBaseLUTs[sessionKey] = newBase
@@ -297,11 +324,19 @@ final class DisplayController {
     func restoreSessionState() {
         applyWorkItem?.cancel()
         let activeDisplays = DisplayIdentity.activeDisplayIDsBySessionKey()
-        for (sessionKey, lut) in sessionOriginalLUTs {
-            guard let displayID = activeDisplays[sessionKey] else { continue }
+        for sessionKey in modifiedLUTSessionKeys {
+            guard let lut = sessionOriginalLUTs[sessionKey],
+                  let displayID = activeDisplays[sessionKey]
+            else { continue }
             if write(lut, to: displayID) == .success {
                 lutRecoveryStore.removeBaseline(for: displayID)
             }
+        }
+        for sessionKey in changedHardwareBrightness {
+            guard let brightness = sessionOriginalHardwareBrightness[sessionKey],
+                  let displayID = activeDisplays[sessionKey]
+            else { continue }
+            _ = hardwareBrightness.setValue(brightness, for: displayID)
         }
     }
 
@@ -330,6 +365,9 @@ final class DisplayController {
         }
         if adjustments.isNeutral {
             lutRecoveryStore.removeBaseline(for: displayID)
+        }
+        if !adjustments.isNeutral {
+            modifiedLUTSessionKeys.insert(DisplayIdentity.sessionKey(for: displayID))
         }
         if reportStatus {
             imageStatusMessage = adjustments.isNeutral

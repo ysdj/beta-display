@@ -34,7 +34,22 @@ final class DisplayModeController {
     private(set) var modes: [DisplayModeDescriptor] = []
     private(set) var currentModeID: String?
     private(set) var statusMessage = L10n.text("status.choose_display_for_modes")
+    private var initialModes: [String: DisplayModeDescriptor] = [:]
+    private var modifiedModeSessionKeys: Set<String> = []
     var onStateChanged: (() -> Void)?
+
+    /// Records the mode that existed before this process changes a display.
+    /// Modes are intentionally session-only: applying a mode in the app must
+    /// not make it a persistent macOS preference.
+    func captureInitialModes(for displayIDs: [CGDirectDisplayID]) {
+        for displayID in displayIDs {
+            let sessionKey = DisplayIdentity.sessionKey(for: displayID)
+            guard initialModes[sessionKey] == nil,
+                  let mode = CGDisplayCopyDisplayMode(displayID)
+            else { continue }
+            initialModes[sessionKey] = DisplayModeDescriptor(mode: mode)
+        }
+    }
 
     func refresh(for displayID: CGDirectDisplayID?) {
         guard let displayID else {
@@ -73,13 +88,30 @@ final class DisplayModeController {
         if currentModeID == modeID {
             return
         }
+        captureInitialModes(for: [displayID])
         let result = CGDisplaySetDisplayMode(displayID, mode.mode, nil)
         if result == .success {
+            modifiedModeSessionKeys.insert(DisplayIdentity.sessionKey(for: displayID))
             statusMessage = L10n.text("status.mode_applied", mode.title)
             refresh(for: displayID)
         } else {
             statusMessage = L10n.text("status.cannot_switch_mode", result.rawValue)
             publish()
+        }
+    }
+
+    /// Restores only modes captured before Beta Display changed them. This is
+    /// deliberately called on termination, never from display recovery, so a
+    /// user-selected resolution stays active while the app is running.
+    func restoreInitialModes() {
+        let activeDisplays = DisplayIdentity.activeDisplayIDsBySessionKey()
+        for sessionKey in modifiedModeSessionKeys {
+            guard let initialMode = initialModes[sessionKey] else { continue }
+            guard let displayID = activeDisplays[sessionKey],
+                  let currentMode = CGDisplayCopyDisplayMode(displayID),
+                  DisplayModeDescriptor(mode: currentMode).id != initialMode.id
+            else { continue }
+            _ = CGDisplaySetDisplayMode(displayID, initialMode.mode, nil)
         }
     }
 

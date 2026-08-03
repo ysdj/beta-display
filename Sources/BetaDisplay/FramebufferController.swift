@@ -68,6 +68,7 @@ final class FramebufferController {
     private let getColorRemapMode: GetColorRemapMode?
     private let setColorRemapMode: SetColorRemapMode?
     private var initialStates: [String: FramebufferState] = [:]
+    private var modifiedStateSessionKeys: Set<String> = []
 
     private(set) var state = FramebufferState.unavailable
     private(set) var modeStatusMessage = L10n.text("status.framebuffer_reading")
@@ -105,6 +106,15 @@ final class FramebufferController {
             openFramebuffer = nil
             getColorRemapMode = nil
             setColorRemapMode = nil
+        }
+    }
+
+    /// Captures the process baseline before saved framebuffer settings are
+    /// applied. Individual setters also capture lazily for displays connected
+    /// after launch.
+    func captureInitialStates(for displayIDs: [CGDirectDisplayID]) {
+        for displayID in displayIDs {
+            captureInitialStateIfNeeded(for: displayID)
         }
     }
 
@@ -160,6 +170,7 @@ final class FramebufferController {
         }
         refresh(for: displayID)
         configurationStore.update(for: displayID) { $0.framebufferMode = mode.rawValue }
+        modifiedStateSessionKeys.insert(DisplayIdentity.sessionKey(for: displayID))
         modeStatusMessage = L10n.text("status.framebuffer_mode_applied", mode.title)
         publish()
     }
@@ -231,7 +242,8 @@ final class FramebufferController {
 
     func restoreAllInitialStates() {
         let activeDisplays = DisplayIdentity.activeDisplayIDsBySessionKey()
-        for displayID in activeDisplays.values {
+        for sessionKey in modifiedStateSessionKeys {
+            guard let displayID = activeDisplays[sessionKey] else { continue }
             restoreInitialState(for: displayID)
         }
     }
@@ -317,6 +329,9 @@ final class FramebufferController {
             return false
         }
         state = readState(for: displayID) ?? .unavailable
+        if persistsConfiguration {
+            modifiedStateSessionKeys.insert(DisplayIdentity.sessionKey(for: displayID))
+        }
         if persistsConfiguration, key == "enableDither" {
             configurationStore.update(for: displayID) { $0.ditheringEnabled = enabled }
         } else if persistsConfiguration, key == "uniformity2D" {

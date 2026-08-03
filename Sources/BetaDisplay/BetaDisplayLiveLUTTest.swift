@@ -70,6 +70,13 @@ enum BetaDisplayLiveLUTTest {
         for _ in 0 ..< 20 {
             coordinator.handleDisplayReconfiguration(.setModeFlag)
         }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.9))
+        if recoveryPasses != 0 {
+            failures.append("mode-only notifications produced \(recoveryPasses) recovery passes")
+        }
+        for _ in 0 ..< 20 {
+            coordinator.handleDisplayReconfiguration(.addFlag)
+        }
         RunLoop.current.run(until: Date().addingTimeInterval(2.8))
         coordinator.stop()
         if recoveryPasses != 2 {

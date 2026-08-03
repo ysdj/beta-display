@@ -25,11 +25,20 @@ final class ColorProfileController {
     private(set) var factoryProfileURL: URL?
     private var defaultProfileID: String?
     private var initialProfiles: [String: InitialProfileState] = [:]
+    private var modifiedProfileSessionKeys: Set<String> = []
     private(set) var statusMessage = L10n.text("status.choose_display_for_profile")
     var onStateChanged: (() -> Void)?
 
     init(configurationStore: DisplayConfigurationStore) {
         self.configurationStore = configurationStore
+    }
+
+    /// Captures the ColorSync profile that was active before this process
+    /// applies any remembered Beta Display profile.
+    func captureInitialProfiles(for displayIDs: [CGDirectDisplayID]) {
+        for displayID in displayIDs {
+            captureInitialProfileIfNeeded(for: displayID)
+        }
     }
 
     func refresh(for displayID: CGDirectDisplayID?) {
@@ -135,6 +144,7 @@ final class ColorProfileController {
                 usesFactoryProfile: false
             )
         }
+        modifiedProfileSessionKeys.insert(DisplayIdentity.sessionKey(for: displayID))
         statusMessage = L10n.text(
             "status.profile_set",
             url.deletingPathExtension().lastPathComponent
@@ -167,6 +177,7 @@ final class ColorProfileController {
         configurationStore.update(for: displayID) {
             $0.colorProfile = PersistedColorProfile(profileURL: nil, usesFactoryProfile: true)
         }
+        modifiedProfileSessionKeys.insert(DisplayIdentity.sessionKey(for: displayID))
         statusMessage = L10n.text("status.profile_restored")
         publish()
         return true
@@ -174,8 +185,9 @@ final class ColorProfileController {
 
     func restoreAllInitialProfiles() {
         let activeDisplays = DisplayIdentity.activeDisplayIDsBySessionKey()
-        for (sessionKey, initial) in initialProfiles {
+        for sessionKey in modifiedProfileSessionKeys {
             guard let displayID = activeDisplays[sessionKey],
+                  let initial = initialProfiles[sessionKey],
                   let uuid = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue()
             else { continue }
             let value: Any = initial.customProfileURL.map { $0 as CFURL } ?? (kCFNull as Any)

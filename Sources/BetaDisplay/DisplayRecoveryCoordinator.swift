@@ -38,13 +38,6 @@ final class DisplayRecoveryCoordinator {
                 queue: .main
             ) { [weak self] _ in
                 Task { @MainActor in self?.scheduleRecovery(restoresTopology: false) }
-            },
-            NotificationCenter.default.addObserver(
-                forName: NSApplication.didChangeScreenParametersNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in self?.scheduleRecovery(restoresTopology: false) }
             }
         ]
         let pointer = Unmanaged.passUnretained(self).toOpaque()
@@ -70,9 +63,19 @@ final class DisplayRecoveryCoordinator {
     func handleDisplayReconfiguration(_ flags: CGDisplayChangeSummaryFlags) {
         guard isStarted,
               !flags.contains(.beginConfigurationFlag),
-              Date() >= ignoreReconfigurationUntil
+              Date() >= ignoreReconfigurationUntil,
+              Self.shouldRecover(for: flags)
         else { return }
         scheduleRecovery(restoresTopology: Self.shouldRestoreTopology(for: flags))
+    }
+
+    /// The generic screen-parameter notification and mode-only callbacks are
+    /// also produced by macOS-owned settings such as True Tone and Night
+    /// Shift. Reapplying Beta Display's saved state for those events would
+    /// turn the utility into a background lock on system preferences. Recover
+    /// only after a display actually enters, leaves, or changes mirroring.
+    static func shouldRecover(for flags: CGDisplayChangeSummaryFlags) -> Bool {
+        shouldRestoreTopology(for: flags)
     }
 
     static func shouldRestoreTopology(for flags: CGDisplayChangeSummaryFlags) -> Bool {
