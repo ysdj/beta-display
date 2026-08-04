@@ -205,7 +205,7 @@ enum BetaDisplaySelfTest {
             .setModeFlag,
             .desktopShapeChangedFlag
         ]
-        if DisplayRecoveryCoordinator.shouldRecover(for: resolutionChange)
+        if !DisplayRecoveryCoordinator.shouldRecover(for: resolutionChange)
             || DisplayRecoveryCoordinator.shouldRestoreTopology(for: resolutionChange)
             || !DisplayRecoveryCoordinator.shouldRecover(for: .addFlag)
             || !DisplayRecoveryCoordinator.shouldRestoreTopology(for: .addFlag) {

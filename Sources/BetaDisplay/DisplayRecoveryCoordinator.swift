@@ -69,13 +69,18 @@ final class DisplayRecoveryCoordinator {
         scheduleRecovery(restoresTopology: Self.shouldRestoreTopology(for: flags))
     }
 
-    /// The generic screen-parameter notification and mode-only callbacks are
-    /// also produced by macOS-owned settings such as True Tone and Night
-    /// Shift. Reapplying Beta Display's saved state for those events would
-    /// turn the utility into a background lock on system preferences. Recover
-    /// only after a display actually enters, leaves, or changes mirroring.
+    /// Mode changes can clear app-installed transfer tables and framebuffer
+    /// effects, so they still need an application-effects recovery pass. The
+    /// recovery callback receives `restoresTopology == false` for these events
+    /// and must not write macOS-owned settings such as resolution, brightness,
+    /// ColorSync, Night Shift, or True Tone.
     static func shouldRecover(for flags: CGDisplayChangeSummaryFlags) -> Bool {
-        shouldRestoreTopology(for: flags)
+        let applicationEffectsResetFlags: CGDisplayChangeSummaryFlags = [
+            .setModeFlag,
+            .desktopShapeChangedFlag
+        ]
+        return shouldRestoreTopology(for: flags)
+            || !flags.intersection(applicationEffectsResetFlags).isEmpty
     }
 
     static func shouldRestoreTopology(for flags: CGDisplayChangeSummaryFlags) -> Bool {

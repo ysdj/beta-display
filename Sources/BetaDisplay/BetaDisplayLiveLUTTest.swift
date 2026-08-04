@@ -67,15 +67,11 @@ enum BetaDisplayLiveLUTTest {
             _ = firstController.applySavedAdjustmentsAfterSystemChange()
         }
         coordinator.start()
+        if write(baseline, to: displayID) != .success {
+            failures.append("could not simulate a mode-change LUT reset")
+        }
         for _ in 0 ..< 20 {
             coordinator.handleDisplayReconfiguration(.setModeFlag)
-        }
-        RunLoop.current.run(until: Date().addingTimeInterval(0.9))
-        if recoveryPasses != 0 {
-            failures.append("mode-only notifications produced \(recoveryPasses) recovery passes")
-        }
-        for _ in 0 ..< 20 {
-            coordinator.handleDisplayReconfiguration(.addFlag)
         }
         RunLoop.current.run(until: Date().addingTimeInterval(2.8))
         coordinator.stop()
@@ -113,6 +109,22 @@ enum BetaDisplayLiveLUTTest {
             failures.append("normal exit did not restore the original LUT")
         }
         return failures
+    }
+
+    private static func write(_ lut: DisplayLUT, to displayID: CGDirectDisplayID) -> CGError {
+        lut.red.withUnsafeBufferPointer { red in
+            lut.green.withUnsafeBufferPointer { green in
+                lut.blue.withUnsafeBufferPointer { blue in
+                    CGSetDisplayTransferByTable(
+                        displayID,
+                        UInt32(lut.red.count),
+                        red.baseAddress,
+                        green.baseAddress,
+                        blue.baseAddress
+                    )
+                }
+            }
+        }
     }
 
     private static func verify(

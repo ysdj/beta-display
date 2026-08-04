@@ -314,7 +314,7 @@ case "$mode" in
                 --draft \
                 --verify-tag \
                 --title "Beta Display ${version}" \
-                --notes "Fixes repeated LUT gain compounding after display wake/reconfiguration. Adds a fail-closed runtime deployment gate. Ad-hoc-signed builds for macOS 13 and later; release validation recorded through macOS ${tested_through_macos}."
+                --notes "Restores app-only LUT and framebuffer adjustments after wake or display-mode changes without locking macOS-owned display settings. Ad-hoc-signed builds for macOS 13 and later; release validation recorded through macOS ${tested_through_macos}."
             release_id=$(release_id_for_tag) || fail "Created release $tag could not be resolved by ID"
             verify_release_assets "$release_id" true
         fi

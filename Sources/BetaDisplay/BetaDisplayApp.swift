@@ -311,12 +311,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if restoresTopology {
             layoutController.applySavedLayout(to: displayController.displays.map(\.id))
             displayController.refreshDisplays()
+            let displayIDs = displayController.displays.map(\.id)
+            colorProfileController.applySavedProfiles(to: displayIDs) { displayID, change in
+                displayController.performColorProfileChange(for: displayID, change)
+            }
         }
 
+        // Display modes and wake can discard app-only image effects. Reapply
+        // those without restoring any macOS-owned setting.
         let displayIDs = displayController.displays.map(\.id)
-        colorProfileController.applySavedProfiles(to: displayIDs) { displayID, change in
-            displayController.performColorProfileChange(for: displayID, change)
-        }
         framebufferController.applySavedState(
             to: displayIDs,
             automaticallyEnableDitheringForColorModes: preferences.enableDitheringForColorModes
