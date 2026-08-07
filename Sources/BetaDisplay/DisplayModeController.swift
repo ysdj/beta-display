@@ -37,6 +37,7 @@ final class DisplayModeController {
     private var initialModes: [String: DisplayModeDescriptor] = [:]
     private var modifiedModeSessionKeys: Set<String> = []
     var onStateChanged: (() -> Void)?
+    var onModeApplied: (() -> Void)?
 
     /// Records the mode that existed before this process changes a display.
     /// Modes are intentionally session-only: applying a mode in the app must
@@ -94,6 +95,7 @@ final class DisplayModeController {
             modifiedModeSessionKeys.insert(DisplayIdentity.sessionKey(for: displayID))
             statusMessage = L10n.text("status.mode_applied", mode.title)
             refresh(for: displayID)
+            onModeApplied?()
         } else {
             statusMessage = L10n.text("status.cannot_switch_mode", result.rawValue)
             publish()

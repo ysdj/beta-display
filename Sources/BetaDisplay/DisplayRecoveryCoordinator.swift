@@ -62,9 +62,10 @@ final class DisplayRecoveryCoordinator {
 
     func handleDisplayReconfiguration(_ flags: CGDisplayChangeSummaryFlags) {
         guard isStarted,
-              !flags.contains(.beginConfigurationFlag),
-              Date() >= ignoreReconfigurationUntil,
-              Self.shouldRecover(for: flags)
+              Self.shouldScheduleRecovery(
+                for: flags,
+                duringCooldown: Date() < ignoreReconfigurationUntil
+              )
         else { return }
         scheduleRecovery(restoresTopology: Self.shouldRestoreTopology(for: flags))
     }
@@ -76,6 +77,29 @@ final class DisplayRecoveryCoordinator {
     /// macOS-owned settings such as resolution, brightness, ColorSync, Night
     /// Shift, or True Tone.
     static func shouldRecover(for flags: CGDisplayChangeSummaryFlags) -> Bool {
+        return shouldRestoreTopology(for: flags)
+            || isApplicationEffectsReset(for: flags)
+    }
+
+    static func shouldScheduleRecovery(
+        for flags: CGDisplayChangeSummaryFlags,
+        duringCooldown: Bool
+    ) -> Bool {
+        guard !flags.contains(.beginConfigurationFlag), shouldRecover(for: flags) else {
+            return false
+        }
+        return !duringCooldown || isApplicationEffectsReset(for: flags)
+    }
+
+    /// A mode change initiated by Beta Display needs an explicit recovery
+    /// request because some WindowServer versions do not report a usable
+    /// post-change reconfiguration flag to the initiating process.
+    func scheduleApplicationEffectsRecovery() {
+        guard isStarted else { return }
+        scheduleRecovery(restoresTopology: false)
+    }
+
+    private static func isApplicationEffectsReset(for flags: CGDisplayChangeSummaryFlags) -> Bool {
         let applicationEffectsResetFlags: CGDisplayChangeSummaryFlags = [
             // Remote display sessions can hand the main-display role back to
             // the physical display after its panel wakes without reporting a
@@ -86,8 +110,7 @@ final class DisplayRecoveryCoordinator {
             .setModeFlag,
             .desktopShapeChangedFlag
         ]
-        return shouldRestoreTopology(for: flags)
-            || !flags.intersection(applicationEffectsResetFlags).isEmpty
+        return !flags.intersection(applicationEffectsResetFlags).isEmpty
     }
 
     static func shouldRestoreTopology(for flags: CGDisplayChangeSummaryFlags) -> Bool {

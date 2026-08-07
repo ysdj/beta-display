@@ -70,9 +70,7 @@ enum BetaDisplayLiveLUTTest {
         if write(baseline, to: displayID) != .success {
             failures.append("could not simulate a mode-change LUT reset")
         }
-        for _ in 0 ..< 20 {
-            coordinator.handleDisplayReconfiguration(.setModeFlag)
-        }
+        coordinator.scheduleApplicationEffectsRecovery()
         RunLoop.current.run(until: Date().addingTimeInterval(2.8))
         coordinator.stop()
         if recoveryPasses != 2 {

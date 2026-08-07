@@ -208,6 +208,14 @@ enum BetaDisplaySelfTest {
         let mainDisplayChange: CGDisplayChangeSummaryFlags = [.setMainFlag]
         if !DisplayRecoveryCoordinator.shouldRecover(for: resolutionChange)
             || DisplayRecoveryCoordinator.shouldRestoreTopology(for: resolutionChange)
+            || !DisplayRecoveryCoordinator.shouldScheduleRecovery(
+                for: .setModeFlag,
+                duringCooldown: true
+            )
+            || DisplayRecoveryCoordinator.shouldScheduleRecovery(
+                for: .addFlag,
+                duringCooldown: true
+            )
             || !DisplayRecoveryCoordinator.shouldRecover(for: mainDisplayChange)
             || DisplayRecoveryCoordinator.shouldRestoreTopology(for: mainDisplayChange)
             || !DisplayRecoveryCoordinator.shouldRecover(for: .addFlag)

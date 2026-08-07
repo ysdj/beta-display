@@ -99,6 +99,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         launchAtLoginController.synchronize(with: preferences.launchAtLogin)
         updateStatusItemVisibility()
+        modeController.onModeApplied = { [weak self] in
+            self?.displayRecoveryCoordinator.scheduleApplicationEffectsRecovery()
+        }
         applySavedDisplayConfiguration()
         displayRecoveryCoordinator.start()
         showSettings(nil)
