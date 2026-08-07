@@ -69,13 +69,20 @@ final class DisplayRecoveryCoordinator {
         scheduleRecovery(restoresTopology: Self.shouldRestoreTopology(for: flags))
     }
 
-    /// Mode changes can clear app-installed transfer tables and framebuffer
-    /// effects, so they still need an application-effects recovery pass. The
-    /// recovery callback receives `restoresTopology == false` for these events
-    /// and must not write macOS-owned settings such as resolution, brightness,
-    /// ColorSync, Night Shift, or True Tone.
+    /// Main-display handoffs and mode changes can clear app-installed transfer
+    /// tables and framebuffer effects, so they still need an
+    /// application-effects recovery pass. The recovery callback receives
+    /// `restoresTopology == false` for these events and must not write
+    /// macOS-owned settings such as resolution, brightness, ColorSync, Night
+    /// Shift, or True Tone.
     static func shouldRecover(for flags: CGDisplayChangeSummaryFlags) -> Bool {
         let applicationEffectsResetFlags: CGDisplayChangeSummaryFlags = [
+            // Remote display sessions can hand the main-display role back to
+            // the physical display after its panel wakes without reporting a
+            // connect, disconnect, or mode change. The transfer table may
+            // have been reset by then, so restore only Beta Display's
+            // application-owned effects for this transition.
+            .setMainFlag,
             .setModeFlag,
             .desktopShapeChangedFlag
         ]

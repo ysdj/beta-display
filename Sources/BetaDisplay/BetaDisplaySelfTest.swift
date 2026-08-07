@@ -205,8 +205,11 @@ enum BetaDisplaySelfTest {
             .setModeFlag,
             .desktopShapeChangedFlag
         ]
+        let mainDisplayChange: CGDisplayChangeSummaryFlags = [.setMainFlag]
         if !DisplayRecoveryCoordinator.shouldRecover(for: resolutionChange)
             || DisplayRecoveryCoordinator.shouldRestoreTopology(for: resolutionChange)
+            || !DisplayRecoveryCoordinator.shouldRecover(for: mainDisplayChange)
+            || DisplayRecoveryCoordinator.shouldRestoreTopology(for: mainDisplayChange)
             || !DisplayRecoveryCoordinator.shouldRecover(for: .addFlag)
             || !DisplayRecoveryCoordinator.shouldRestoreTopology(for: .addFlag) {
             failures.append(L10n.text("self_test.resolution_not_locked"))
