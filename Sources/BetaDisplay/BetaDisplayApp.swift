@@ -3,7 +3,7 @@ import Darwin
 
 @main
 struct BetaDisplayMain {
-    private static let deploymentGateMarker = "beta-display-lut-integrity-guard-v3"
+    private static let deploymentGateMarker = "beta-display-lut-integrity-guard-v4"
 
     @MainActor
     static func main() {
@@ -18,8 +18,17 @@ struct BetaDisplayMain {
             // display, so another running instance would fight it and make
             // its read-backs meaningless.
             let liveTestInstanceGuard = SingleInstanceController()
-            guard liveTestInstanceGuard.claim() else {
+            switch liveTestInstanceGuard.claim() {
+            case .acquired:
+                break
+            case .existingInstance:
                 print("FAIL: another Beta Display instance is running; quit it before the live LUT test")
+                exit(EXIT_FAILURE)
+            case let .unavailable(reason):
+                // Without a lock the test cannot prove that no other instance
+                // owns the transfer tables, which would invalidate every
+                // read-back it performs.
+                print("FAIL: the instance lock is unavailable (\(reason)); refusing to run the live LUT test")
                 exit(EXIT_FAILURE)
             }
             defer { liveTestInstanceGuard.release() }
@@ -41,7 +50,7 @@ struct BetaDisplayMain {
             exit(EXIT_FAILURE)
         }
         let singleInstanceController = SingleInstanceController()
-        guard singleInstanceController.claim() else {
+        if singleInstanceController.claimAndReport() == .existingInstance {
             singleInstanceController.requestActivationOfExistingInstance()
             return
         }
@@ -110,6 +119,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             suspensionBehavior: .deliverImmediately
         )
+        // A second launch writes its activation request before posting the
+        // distributed notification. Consuming it here, after the observer is
+        // registered, closes the window where that notification would have
+        // been delivered before this process was listening.
+        if singleInstanceController.consumeActivationRequest() {
+            AppLog.launch.notice("consumed an activation request from a second launch")
+        }
         launchAtLoginController.synchronize(with: preferences.launchAtLogin)
         let loginItemStatus = launchAtLoginController.status.diagnosticName
         AppLog.launch.notice(
@@ -166,6 +182,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func activateExistingWindow(_ notification: Notification) {
+        // The publisher writes the request before posting, so an arriving
+        // notification always has a matching file to consume; removing it
+        // here keeps a second launch while the app is already running from
+        // leaving a stale request for the next start.
+        _ = singleInstanceController.consumeActivationRequest()
         showSettings(nil)
     }
 

@@ -23,7 +23,6 @@ final class DisplayRecoveryCoordinator {
     private var isRecovering = false
     private var isStarted = false
     private var isWatchingIntegrity = false
-    private var ignoreReconfigurationUntil = Date.distantPast
     private var powerSourceNotificationToken: Int32?
 
     /// WindowServer can clear a transfer table more than once while a mode
@@ -116,10 +115,7 @@ final class DisplayRecoveryCoordinator {
 
     func handleDisplayReconfiguration(_ flags: CGDisplayChangeSummaryFlags) {
         guard isStarted,
-              Self.shouldScheduleRecovery(
-                for: flags,
-                duringCooldown: Date() < ignoreReconfigurationUntil
-              )
+              Self.shouldScheduleRecovery(for: flags)
         else { return }
         AppLog.recovery.debug("display reconfiguration flags \(flags.rawValue, privacy: .public)")
         scheduleRecovery(
@@ -203,14 +199,14 @@ final class DisplayRecoveryCoordinator {
             || isApplicationEffectsReset(for: flags)
     }
 
-    static func shouldScheduleRecovery(
-        for flags: CGDisplayChangeSummaryFlags,
-        duringCooldown: Bool
-    ) -> Bool {
-        guard !flags.contains(.beginConfigurationFlag), shouldRecover(for: flags) else {
-            return false
-        }
-        return !duringCooldown || isApplicationEffectsReset(for: flags)
+    /// Duplicate callbacks are merged into a single pending pass by
+    /// `scheduleRecovery`; they are never dropped. A topology change arriving
+    /// while a previous recovery is still settling must still be scheduled,
+    /// because the in-flight retries may be application-effects only (for
+    /// example, a display attached during a mode-change recovery would
+    /// otherwise keep its macOS default layout until the next event).
+    static func shouldScheduleRecovery(for flags: CGDisplayChangeSummaryFlags) -> Bool {
+        !flags.contains(.beginConfigurationFlag) && shouldRecover(for: flags)
     }
 
     /// A mode change initiated by Beta Display needs an explicit recovery
@@ -290,7 +286,6 @@ final class DisplayRecoveryCoordinator {
         }
         recover(restoresTopology)
         isRecovering = false
-        ignoreReconfigurationUntil = Date().addingTimeInterval(1.0)
 
         // A callback can arrive while the recovery closure is writing the
         // tables. Preserve it for the next pass instead of dropping it behind

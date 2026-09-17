@@ -15,19 +15,65 @@ enum DisplayLUTIntegrity {
     static let matchTolerance = 0.002
 
     /// Session keys whose installed table is missing or no longer matches the
-    /// table this process last wrote. A missing entry means the table could
-    /// not be read during this pass; that counts as drift so the caller
-    /// rewrites it from the stable baseline.
+    /// table this process last wrote. Only keys that still belong to a display
+    /// present in the current active list are considered: a disconnected
+    /// display keeps its saved state but has no table to verify. A missing
+    /// entry for a present display means the table could not be read during
+    /// this pass; that counts as drift so the caller rewrites it from the
+    /// stable baseline.
     static func driftedDisplayKeys(
         expected: [String: DisplayLUT],
         installed: [String: DisplayLUT],
+        presentKeys: Set<String>,
         tolerance: Double = matchTolerance
     ) -> [String] {
         expected.compactMap { key, lut in
+            guard presentKeys.contains(key) else { return nil }
             guard let installedLUT = installed[key] else { return key }
             return installedLUT.approximatelyMatches(lut, tolerance: tolerance) ? nil : key
         }
         .sorted()
+    }
+
+    /// Bounded retry schedule for an unchanged drift set. A sleeping or
+    /// unplugged display cannot be repaired by rewriting its table, so the
+    /// interval doubles up to a cap instead of submitting the same repair on
+    /// every steady-state verification pass. A different drift set retries
+    /// immediately.
+    struct DriftRepairBackoff {
+        static let initialInterval: TimeInterval = 30
+        static let maximumInterval: TimeInterval = 300
+
+        private(set) var signature: [String] = []
+        private(set) var consecutiveAttempts = 0
+        private var lastAttemptDate: Date?
+
+        var currentInterval: TimeInterval {
+            guard consecutiveAttempts > 0 else { return 0 }
+            let interval = Self.initialInterval * pow(2, Double(consecutiveAttempts - 1))
+            return min(interval, Self.maximumInterval)
+        }
+
+        func shouldAttempt(signature newSignature: [String], now: Date = Date()) -> Bool {
+            guard newSignature == signature, let lastAttemptDate else { return true }
+            return now.timeIntervalSince(lastAttemptDate) >= currentInterval
+        }
+
+        mutating func recordAttempt(signature newSignature: [String], now: Date = Date()) {
+            if newSignature == signature {
+                consecutiveAttempts += 1
+            } else {
+                signature = newSignature
+                consecutiveAttempts = 1
+            }
+            lastAttemptDate = now
+        }
+
+        mutating func reset() {
+            signature = []
+            consecutiveAttempts = 0
+            lastAttemptDate = nil
+        }
     }
 
     /// Verification passes that follow launch. Beta Display is auto-started

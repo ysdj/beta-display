@@ -180,24 +180,72 @@ enum BetaDisplaySelfTest {
         )
         if !DisplayLUTIntegrity.driftedDisplayKeys(
             expected: ["a": ownedLUT],
-            installed: ["a": ownedLUT]
+            installed: ["a": ownedLUT],
+            presentKeys: ["a"]
         ).isEmpty
             || !DisplayLUTIntegrity.driftedDisplayKeys(
                 expected: ["a": ownedLUT],
-                installed: ["a": resampledOwnedLUT]
+                installed: ["a": resampledOwnedLUT],
+                presentKeys: ["a"]
             ).isEmpty
             || DisplayLUTIntegrity.driftedDisplayKeys(
                 expected: ["a": ownedLUT],
-                installed: ["a": integrityBase]
+                installed: ["a": integrityBase],
+                presentKeys: ["a"]
             ) != ["a"]
             || DisplayLUTIntegrity.driftedDisplayKeys(
                 expected: ["a": ownedLUT],
-                installed: [:]
+                installed: [:],
+                presentKeys: ["a"]
             ) != ["a"]
             || DisplayLUTIntegrity.driftedDisplayKeys(
                 expected: ["a": ownedLUT, "b": ownedLUT],
-                installed: ["a": integrityBase, "b": ownedLUT]
-            ) != ["a"] {
+                installed: ["a": integrityBase, "b": ownedLUT],
+                presentKeys: ["a", "b"]
+            ) != ["a"]
+            // A disconnected display keeps its saved table but has nothing to
+            // verify; it must not be reported as drift and must not trigger a
+            // rewrite of the displays that are still present.
+            || !DisplayLUTIntegrity.driftedDisplayKeys(
+                expected: ["a": ownedLUT, "gone": ownedLUT],
+                installed: ["a": ownedLUT],
+                presentKeys: ["a"]
+            ).isEmpty {
+            failures.append(L10n.text("self_test.lut"))
+        }
+        // An unchanged drift set must be retried with a growing interval so a
+        // sleeping or unplugged display cannot cause a write every pass.
+        let backoffStart = Date()
+        var backoff = DisplayLUTIntegrity.DriftRepairBackoff()
+        if !backoff.shouldAttempt(signature: ["a"], now: backoffStart) {
+            failures.append(L10n.text("self_test.lut"))
+        }
+        backoff.recordAttempt(signature: ["a"], now: backoffStart)
+        if backoff.shouldAttempt(signature: ["a"], now: backoffStart.addingTimeInterval(1))
+            || !backoff.shouldAttempt(signature: ["a"], now: backoffStart.addingTimeInterval(31))
+            || !backoff.shouldAttempt(
+                signature: ["a", "b"],
+                now: backoffStart.addingTimeInterval(1)
+            )
+            || backoff.currentInterval > DisplayLUTIntegrity.DriftRepairBackoff.maximumInterval {
+            failures.append(L10n.text("self_test.lut"))
+        }
+        backoff.recordAttempt(signature: ["a"], now: backoffStart.addingTimeInterval(31))
+        if backoff.shouldAttempt(signature: ["a"], now: backoffStart.addingTimeInterval(90))
+            || !backoff.shouldAttempt(signature: ["a"], now: backoffStart.addingTimeInterval(91)) {
+            failures.append(L10n.text("self_test.lut"))
+        }
+        for step in 2 ... 6 {
+            backoff.recordAttempt(
+                signature: ["a"],
+                now: backoffStart.addingTimeInterval(Double(step) * 1_000)
+            )
+        }
+        if backoff.currentInterval != DisplayLUTIntegrity.DriftRepairBackoff.maximumInterval {
+            failures.append(L10n.text("self_test.lut"))
+        }
+        backoff.reset()
+        if !backoff.shouldAttempt(signature: ["a"], now: backoffStart) {
             failures.append(L10n.text("self_test.lut"))
         }
         let verificationDelays = DisplayLUTIntegrity.startupVerificationDelays
@@ -245,6 +293,49 @@ enum BetaDisplaySelfTest {
             || AppMetadata.isVersion("v1.1.1", newerThan: "1.1.2") {
             failures.append(L10n.text("self_test.version_comparison"))
         }
+        // The instance lock must distinguish "another instance" from "no
+        // usable lock location": the latter still starts the app, and the
+        // activation request file must survive a second launch that races the
+        // first launch's observer registration.
+        let lockDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("BetaDisplay.self-test-lock-\(UUID().uuidString)", isDirectory: true)
+        if (try? FileManager.default.createDirectory(
+            at: lockDirectory,
+            withIntermediateDirectories: true
+        )) != nil {
+            defer { try? FileManager.default.removeItem(at: lockDirectory) }
+            let lockURL = lockDirectory.appendingPathComponent("instance.lock")
+            let firstClaim = SingleInstanceController()
+            let secondClaim = SingleInstanceController()
+            let standaloneClaim = SingleInstanceController()
+            let firstResult = firstClaim.claim(lockURLs: [lockURL])
+            let secondResult = secondClaim.claim(lockURLs: [lockURL])
+            let holdingResult = firstClaim.claim(lockURLs: nil)
+            firstClaim.release()
+            let reclaimedResult = secondClaim.claim(lockURLs: [lockURL])
+            secondClaim.release()
+            var unavailableReason: String?
+            if case let .unavailable(reason) = standaloneClaim.claim(lockURLs: nil) {
+                unavailableReason = reason
+            }
+            if firstResult != .acquired
+                || secondResult != .existingInstance
+                || holdingResult != .acquired
+                || reclaimedResult != .acquired
+                || (unavailableReason?.isEmpty ?? true) {
+                failures.append(L10n.text("self_test.instance_lock"))
+                standaloneClaim.release()
+            }
+            let requestURL = lockDirectory.appendingPathComponent("activate.request")
+            if SingleInstanceController.consumeActivationRequest(at: requestURL)
+                || !SingleInstanceController.writeActivationRequest(to: requestURL)
+                || !SingleInstanceController.consumeActivationRequest(at: requestURL)
+                || SingleInstanceController.consumeActivationRequest(at: requestURL) {
+                failures.append(L10n.text("self_test.instance_lock"))
+            }
+        } else {
+            failures.append(L10n.text("self_test.instance_lock"))
+        }
         let resolutionChange: CGDisplayChangeSummaryFlags = [
             .setModeFlag,
             .desktopShapeChangedFlag
@@ -252,14 +343,12 @@ enum BetaDisplaySelfTest {
         let mainDisplayChange: CGDisplayChangeSummaryFlags = [.setMainFlag]
         if !DisplayRecoveryCoordinator.shouldRecover(for: resolutionChange)
             || DisplayRecoveryCoordinator.shouldRestoreTopology(for: resolutionChange)
-            || !DisplayRecoveryCoordinator.shouldScheduleRecovery(
-                for: .setModeFlag,
-                duringCooldown: true
-            )
-            || DisplayRecoveryCoordinator.shouldScheduleRecovery(
-                for: .addFlag,
-                duringCooldown: true
-            )
+            // A topology event must still be scheduled while a previous
+            // recovery settles; dropping it would lose the saved layout for a
+            // display that appeared during that window.
+            || !DisplayRecoveryCoordinator.shouldScheduleRecovery(for: .setModeFlag)
+            || !DisplayRecoveryCoordinator.shouldScheduleRecovery(for: .addFlag)
+            || DisplayRecoveryCoordinator.shouldScheduleRecovery(for: .beginConfigurationFlag)
             || !DisplayRecoveryCoordinator.shouldRecover(for: mainDisplayChange)
             || DisplayRecoveryCoordinator.shouldRestoreTopology(for: mainDisplayChange)
             || !DisplayRecoveryCoordinator.shouldRecover(for: .addFlag)

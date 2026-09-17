@@ -240,3 +240,4 @@
 "self_test.rgb_gain_safety" = "RGB gain safety did not preserve a visible channel";
 "self_test.version_comparison" = "Update version comparison failed";
 "self_test.resolution_not_locked" = "Display recovery attempted to restore an externally changed resolution";
+"self_test.instance_lock" = "Single-instance locking or the activation request handshake failed";

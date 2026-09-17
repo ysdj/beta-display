@@ -8,7 +8,7 @@ set -euo pipefail
 project_dir=${0:A:h:h}
 target_app="/Applications/Beta Display.app"
 source_app=""
-expected_marker="beta-display-lut-integrity-guard-v3"
+expected_marker="beta-display-lut-integrity-guard-v4"
 deployment_lock_directory=""
 deployment_lock_owner_file=""
 deployment_lock_held=false

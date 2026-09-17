@@ -29,6 +29,9 @@ final class DisplayController {
     /// The table this process last installed per display, used to notice that
     /// WindowServer or another process replaced it.
     private var installedAdjustmentLUTs: [String: DisplayLUT] = [:]
+    /// Throttles repeated repairs of an unchanged drift set so a sleeping or
+    /// disconnected display cannot cause a write on every steady pass.
+    private var driftRepairBackoff = DisplayLUTIntegrity.DriftRepairBackoff()
     private var changedHardwareBrightness: Set<String> = []
     private var workingBaseLUTs: [String: DisplayLUT] = [:]
     private let lutRecoveryStore = DisplayLUTRecoveryStore()
@@ -356,20 +359,24 @@ final class DisplayController {
     }
 
     /// Displays whose installed table is unreadable or no longer the table
-    /// this process wrote. Displays without a Beta Display table are ignored.
+    /// this process wrote. Displays without a Beta Display table are ignored,
+    /// and so are saved tables whose display is no longer in the active list.
     func displayIDsWithDriftedAdjustments() -> [CGDirectDisplayID] {
         guard !installedAdjustmentLUTs.isEmpty else { return [] }
         var installed: [String: DisplayLUT] = [:]
+        var presentKeys: Set<String> = []
         for display in displays {
             let sessionKey = DisplayIdentity.sessionKey(for: display.id)
             guard installedAdjustmentLUTs[sessionKey] != nil else { continue }
+            presentKeys.insert(sessionKey)
             if let lut = readCurrentLUT(for: display.id, reportsErrors: false) {
                 installed[sessionKey] = lut
             }
         }
         let driftedKeys = DisplayLUTIntegrity.driftedDisplayKeys(
             expected: installedAdjustmentLUTs,
-            installed: installed
+            installed: installed,
+            presentKeys: presentKeys
         )
         guard !driftedKeys.isEmpty else { return [] }
         return displays
@@ -378,18 +385,56 @@ final class DisplayController {
     }
 
     /// Rewrites the saved transfer tables from the stable baseline when the
-    /// installed table was replaced or cleared. The write is composed from the
-    /// same baseline as the original application, so a repair can never
-    /// compound the saved gain. Returns true when a repair was submitted.
+    /// installed table was replaced or cleared. Only the drifted displays are
+    /// rewritten; healthy displays keep the table this process installed.
+    /// Repeated attempts for an unchanged drift set are backed off, because a
+    /// sleeping or unplugged display cannot accept the write and retrying on
+    /// every steady pass would only amplify writes and logs. The write is
+    /// composed from the same baseline as the original application, so a
+    /// repair can never compound the saved gain. Returns true when a repair
+    /// was submitted.
     @discardableResult
     func repairDriftedAdjustments() -> Bool {
         let driftedDisplayIDs = displayIDsWithDriftedAdjustments()
-        guard !driftedDisplayIDs.isEmpty else { return false }
-        let repaired = applySavedAdjustmentsAfterSystemChange()
+        guard !driftedDisplayIDs.isEmpty else {
+            driftRepairBackoff.reset()
+            return false
+        }
+        let signature = driftedDisplayIDs
+            .map { DisplayIdentity.sessionKey(for: $0) }
+            .sorted()
+        let now = Date()
+        guard driftRepairBackoff.shouldAttempt(signature: signature, now: now) else {
+            AppLog.lut.debug(
+                "deferring transfer table repair for \(driftedDisplayIDs.count, privacy: .public) display(s)"
+            )
+            return false
+        }
+        driftRepairBackoff.recordAttempt(signature: signature, now: now)
+        var repairedAny = false
+        for displayID in driftedDisplayIDs {
+            guard let saved = configurationStore.configuration(for: displayID)?.adjustments else {
+                continue
+            }
+            let sessionKey = DisplayIdentity.sessionKey(for: displayID)
+            let safeAdjustments = saved.sanitizedForApplication()
+            adjustmentsByDisplay[sessionKey] = safeAdjustments
+            if safeAdjustments != saved {
+                configurationStore.update(for: displayID) { $0.adjustments = safeAdjustments }
+            }
+            if applyImmediately(
+                displayID: displayID,
+                adjustments: safeAdjustments,
+                reportStatus: false
+            ) {
+                repairedAny = true
+            }
+        }
+        publishState()
         AppLog.lut.notice(
-            "transfer table drift on \(driftedDisplayIDs.count, privacy: .public) display(s); repair submitted: \(repaired, privacy: .public)"
+            "transfer table drift on \(driftedDisplayIDs.count, privacy: .public) display(s); repair submitted: \(repairedAny, privacy: .public)"
         )
-        return repaired
+        return repairedAny
     }
 
     func restoreSessionState() {
