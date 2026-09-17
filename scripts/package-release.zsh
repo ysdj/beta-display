@@ -314,7 +314,7 @@ case "$mode" in
                 --draft \
                 --verify-tag \
                 --title "Beta Display ${version}" \
-                --notes "Keeps the saved RGB gain installed after an automatic start at login and rewrites the transfer table from the stable baseline whenever macOS or another process replaces it, without submitting the same repair on every verification pass while a display is asleep or disconnected. A second launch always reaches the running instance — an unusable instance-lock location no longer exits the app silently — and a display attached during an in-flight recovery no longer keeps its macOS default layout. Ad-hoc-signed builds for macOS 13 and later; release validation recorded through macOS ${tested_through_macos}."
+                --notes "Keeps an automatic start at login in the background: the launch event decides whether the app was started automatically, so only a user start opens the settings window. Flushes pending display configuration when the app terminates so a slider drag in flight is not lost, and hardens the verified deployment script against a process that disappears between polls. Ad-hoc-signed builds for macOS 13 and later; release validation recorded through macOS ${tested_through_macos}."
             release_id=$(release_id_for_tag) || fail "Created release $tag could not be resolved by ID"
             verify_release_assets "$release_id" true
         fi
