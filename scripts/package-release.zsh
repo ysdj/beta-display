@@ -85,7 +85,7 @@ verify_app_bundle() {
 
     local gate_output
     gate_output=$("$app_path/Contents/MacOS/BetaDisplay" --deployment-gate)
-    local expected_gate="BetaDisplay deployment-gate beta-display-lut-baseline-guard-v2 $version $build_number"
+    local expected_gate="BetaDisplay deployment-gate beta-display-lut-integrity-guard-v3 $version $build_number"
     [[ "$gate_output" == "$expected_gate" ]] || fail "Deployment gate failed for $app_path"
 
     local self_test_output
@@ -314,7 +314,7 @@ case "$mode" in
                 --draft \
                 --verify-tag \
                 --title "Beta Display ${version}" \
-                --notes "Restores app-only LUT and framebuffer adjustments after wake, display-mode changes, and main-display handoffs without locking macOS-owned display settings. Ad-hoc-signed builds for macOS 13 and later; release validation recorded through macOS ${tested_through_macos}."
+                --notes "Verifies the application-owned transfer table while the app runs and rewrites it from the stable baseline whenever macOS or another process replaces it, so a saved RGB gain survives auto-start at login, wake, display-mode changes, and main-display handoffs without compounding. Login-item approval state is reported instead of being replaced by a registration error. Ad-hoc-signed builds for macOS 13 and later; release validation recorded through macOS ${tested_through_macos}."
             release_id=$(release_id_for_tag) || fail "Created release $tag could not be resolved by ID"
             verify_release_assets "$release_id" true
         fi

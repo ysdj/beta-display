@@ -109,6 +109,17 @@ final class LaunchAtLoginController {
                 message
             }
         }
+
+        /// A stable, log-safe name for diagnostics. The user-facing
+        /// description is localized and may embed a system error message.
+        var diagnosticName: String {
+            switch self {
+            case .enabled: "enabled"
+            case .disabled: "not registered"
+            case .requiresApproval: "requires approval"
+            case .unavailable: "unavailable"
+            }
+        }
     }
 
     private(set) var status: Status = .disabled
@@ -127,16 +138,31 @@ final class LaunchAtLoginController {
     }
 
     func enable() {
-        if SMAppService.mainApp.status == .enabled {
+        switch SMAppService.mainApp.status {
+        case .enabled:
             refresh()
-            return
-        }
-        do {
-            try SMAppService.mainApp.register()
+        case .requiresApproval:
+            // The registration exists but needs approval in System Settings.
+            // Registering again cannot approve it on the user's behalf and
+            // would replace the actionable guidance with an error message.
             refresh()
-        } catch {
-            status = .unavailable(L10n.text("login.enable_failed", error.localizedDescription))
-            onStatusChanged?()
+            AppLog.launch.notice(
+                "login item is registered but awaits approval in System Settings > General > Login Items"
+            )
+        case .notRegistered, .notFound:
+            do {
+                try SMAppService.mainApp.register()
+                AppLog.launch.notice("login item registered")
+                refresh()
+            } catch {
+                status = .unavailable(L10n.text("login.enable_failed", error.localizedDescription))
+                AppLog.launch.error(
+                    "login item registration failed: \(error.localizedDescription, privacy: .public)"
+                )
+                onStatusChanged?()
+            }
+        @unknown default:
+            refresh()
         }
     }
 
@@ -147,9 +173,13 @@ final class LaunchAtLoginController {
         }
         do {
             try SMAppService.mainApp.unregister()
+            AppLog.launch.notice("login item unregistered")
             refresh()
         } catch {
             status = .unavailable(L10n.text("login.disable_failed", error.localizedDescription))
+            AppLog.launch.error(
+                "login item removal failed: \(error.localizedDescription, privacy: .public)"
+            )
             onStatusChanged?()
         }
     }

@@ -169,6 +169,50 @@ enum BetaDisplaySelfTest {
             failures.append(L10n.text("self_test.lut"))
         }
 
+        // The table this process installed can be replaced by WindowServer or
+        // by another process. Drift detection must notice a replacement while
+        // accepting the resampled copy macOS may install for the same curve.
+        let integrityBase = DisplayLUT(adjustments: .neutral, count: 1024)
+        let ownedLUT = DisplayLUT(base: integrityBase, adjustments: reducedGain)
+        let resampledOwnedLUT = DisplayLUT(
+            base: DisplayLUT(adjustments: .neutral, count: 512),
+            adjustments: reducedGain
+        )
+        if !DisplayLUTIntegrity.driftedDisplayKeys(
+            expected: ["a": ownedLUT],
+            installed: ["a": ownedLUT]
+        ).isEmpty
+            || !DisplayLUTIntegrity.driftedDisplayKeys(
+                expected: ["a": ownedLUT],
+                installed: ["a": resampledOwnedLUT]
+            ).isEmpty
+            || DisplayLUTIntegrity.driftedDisplayKeys(
+                expected: ["a": ownedLUT],
+                installed: ["a": integrityBase]
+            ) != ["a"]
+            || DisplayLUTIntegrity.driftedDisplayKeys(
+                expected: ["a": ownedLUT],
+                installed: [:]
+            ) != ["a"]
+            || DisplayLUTIntegrity.driftedDisplayKeys(
+                expected: ["a": ownedLUT, "b": ownedLUT],
+                installed: ["a": integrityBase, "b": ownedLUT]
+            ) != ["a"] {
+            failures.append(L10n.text("self_test.lut"))
+        }
+        let verificationDelays = DisplayLUTIntegrity.startupVerificationDelays
+        var delaysAscend = !verificationDelays.isEmpty
+        for (previous, next) in zip(verificationDelays, verificationDelays.dropFirst())
+            where previous >= next {
+            delaysAscend = false
+        }
+        if !delaysAscend
+            || (verificationDelays.last ?? 0) > 30
+            || DisplayLUTIntegrity.steadyVerificationInterval <= 0
+            || DisplayLUTIntegrity.steadyVerificationInterval > 15 {
+            failures.append(L10n.text("self_test.lut"))
+        }
+
         // The clean baseline must survive an unclean process restart and be
         // removed only after a successful restore.
         let suiteName = "BetaDisplay.self-test.\(UUID().uuidString)"

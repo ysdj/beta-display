@@ -6,17 +6,23 @@ import notify
 @MainActor
 final class DisplayRecoveryCoordinator {
     typealias Recovery = (_ restoresTopology: Bool) -> Void
+    /// Returns true when application-owned effects had to be written again.
+    typealias Verification = () -> Bool
 
     private let recover: Recovery
+    private let verify: Verification
     private let workspaceNotificationCenter = NSWorkspace.shared.notificationCenter
     private var notificationTokens: [NSObjectProtocol] = []
     private var scheduledRecovery: DispatchWorkItem?
     private var retryRecovery: DispatchWorkItem?
+    private var integrityVerification: DispatchWorkItem?
+    private var startupVerifications: [DispatchWorkItem] = []
     private var pendingTopologyRestore = false
     private var pendingApplicationEffectsRecovery = false
     private var recoveryRetriesRemaining = 0
     private var isRecovering = false
     private var isStarted = false
+    private var isWatchingIntegrity = false
     private var ignoreReconfigurationUntil = Date.distantPast
     private var powerSourceNotificationToken: Int32?
 
@@ -27,8 +33,9 @@ final class DisplayRecoveryCoordinator {
     private static let normalRecoveryRetries = 1
     private static let recoveryDelay: TimeInterval = 1.5
 
-    init(recover: @escaping Recovery) {
+    init(recover: @escaping Recovery, verify: @escaping Verification = { false }) {
         self.recover = recover
+        self.verify = verify
     }
 
     func start() {
@@ -46,6 +53,18 @@ final class DisplayRecoveryCoordinator {
             },
             workspaceNotificationCenter.addObserver(
                 forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.scheduleRecovery(restoresTopology: false, applicationEffects: true)
+                }
+            },
+            // A login (including the auto-start at login) and a fast user
+            // switch back to this session can settle the display state after
+            // Beta Display already wrote its tables.
+            workspaceNotificationCenter.addObserver(
+                forName: NSWorkspace.sessionDidBecomeActiveNotification,
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
@@ -78,6 +97,7 @@ final class DisplayRecoveryCoordinator {
         retryRecovery?.cancel()
         scheduledRecovery = nil
         retryRecovery = nil
+        stopIntegrityWatch()
         pendingTopologyRestore = false
         pendingApplicationEffectsRecovery = false
         recoveryRetriesRemaining = 0
@@ -101,9 +121,66 @@ final class DisplayRecoveryCoordinator {
                 duringCooldown: Date() < ignoreReconfigurationUntil
               )
         else { return }
+        AppLog.recovery.debug("display reconfiguration flags \(flags.rawValue, privacy: .public)")
         scheduleRecovery(
             restoresTopology: Self.shouldRestoreTopology(for: flags),
             applicationEffects: Self.isApplicationEffectsReset(for: flags)
+        )
+    }
+
+    /// Verifies that application-owned effects are still installed and
+    /// repairs them when they are not. Returns true when a repair was needed.
+    @discardableResult
+    func verifyApplicationEffects() -> Bool {
+        guard isStarted else { return false }
+        return verify()
+    }
+
+    /// Starts the launch ladder plus the steady verification pass. The
+    /// WindowServer can replace the transfer tables while the login session
+    /// that launched Beta Display is still settling, so the first seconds
+    /// after launch are checked repeatedly and the state is then watched
+    /// for as long as the app owns a table.
+    func startIntegrityWatch() {
+        guard isStarted, !isWatchingIntegrity else { return }
+        isWatchingIntegrity = true
+        for delay in DisplayLUTIntegrity.startupVerificationDelays {
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, self.isStarted else { return }
+                self.performVerification(trigger: "launch + \(delay)s")
+            }
+            startupVerifications.append(work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        }
+        scheduleIntegrityVerification()
+    }
+
+    func stopIntegrityWatch() {
+        isWatchingIntegrity = false
+        integrityVerification?.cancel()
+        integrityVerification = nil
+        startupVerifications.forEach { $0.cancel() }
+        startupVerifications.removeAll()
+    }
+
+    private func scheduleIntegrityVerification() {
+        guard isStarted, isWatchingIntegrity else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isStarted, self.isWatchingIntegrity else { return }
+            self.performVerification(trigger: "watch")
+            self.scheduleIntegrityVerification()
+        }
+        integrityVerification = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + DisplayLUTIntegrity.steadyVerificationInterval,
+            execute: work
+        )
+    }
+
+    private func performVerification(trigger: String) {
+        guard verify() else { return }
+        AppLog.recovery.notice(
+            "transfer table repaired after verification trigger \(trigger, privacy: .public)"
         )
     }
 

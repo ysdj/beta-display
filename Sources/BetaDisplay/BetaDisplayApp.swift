@@ -3,18 +3,26 @@ import Darwin
 
 @main
 struct BetaDisplayMain {
-    private static let deploymentGateMarker = "beta-display-lut-baseline-guard-v2"
+    private static let deploymentGateMarker = "beta-display-lut-integrity-guard-v3"
 
     @MainActor
     static func main() {
         if CommandLine.arguments.contains("--deployment-gate") {
-            let bundle = Bundle.main
-            let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
-            let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
-            print("BetaDisplay deployment-gate \(deploymentGateMarker) \(version) \(build)")
+            print(
+                "BetaDisplay deployment-gate \(deploymentGateMarker) \(Bundle.main.betaDisplayVersion) \(Bundle.main.betaDisplayBuild)"
+            )
             return
         }
         if CommandLine.arguments.contains("--live-lut-test") {
+            // The live test overwrites the transfer table of every active
+            // display, so another running instance would fight it and make
+            // its read-backs meaningless.
+            let liveTestInstanceGuard = SingleInstanceController()
+            guard liveTestInstanceGuard.claim() else {
+                print("FAIL: another Beta Display instance is running; quit it before the live LUT test")
+                exit(EXIT_FAILURE)
+            }
+            defer { liveTestInstanceGuard.release() }
             let failures = BetaDisplayLiveLUTTest.run()
             guard !failures.isEmpty else {
                 print("Beta Display live LUT test passed")
@@ -58,9 +66,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let colorModesController: DisplayColorModesController
     private let preferences = AppPreferences()
     private let launchAtLoginController = LaunchAtLoginController()
-    private lazy var displayRecoveryCoordinator = DisplayRecoveryCoordinator { [weak self] restoresTopology in
-        self?.restoreDisplayStateAfterSystemChange(restoresTopology: restoresTopology)
-    }
+    private lazy var displayRecoveryCoordinator = DisplayRecoveryCoordinator(
+        recover: { [weak self] restoresTopology in
+            self?.restoreDisplayStateAfterSystemChange(restoresTopology: restoresTopology)
+        },
+        verify: { [weak self] in
+            self?.repairDriftedApplicationEffects() ?? false
+        }
+    )
     private var settingsWindowController: SettingsWindowController?
     private var statusItem: NSStatusItem?
     private var restoredProcessEffects = false
@@ -98,12 +111,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suspensionBehavior: .deliverImmediately
         )
         launchAtLoginController.synchronize(with: preferences.launchAtLogin)
+        let loginItemStatus = launchAtLoginController.status.diagnosticName
+        AppLog.launch.notice(
+            "Beta Display \(Bundle.main.betaDisplayVersion, privacy: .public) build \(Bundle.main.betaDisplayBuild, privacy: .public) started; launch at login \(loginItemStatus, privacy: .public)"
+        )
         updateStatusItemVisibility()
         modeController.onModeApplied = { [weak self] in
             self?.displayRecoveryCoordinator.scheduleApplicationEffectsRecovery()
         }
-        applySavedDisplayConfiguration()
+        // Observers start before the saved configuration is applied so a
+        // reconfiguration that arrives during startup is not missed.
         displayRecoveryCoordinator.start()
+        applySavedDisplayConfiguration()
+        // Auto-start happens while the login session is still settling, so
+        // watch the tables the app just installed and verify them right away
+        // instead of trusting the single startup write.
+        displayRecoveryCoordinator.startIntegrityWatch()
+        displayRecoveryCoordinator.verifyApplicationEffects()
         showSettings(nil)
     }
 
@@ -307,6 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func restoreDisplayStateAfterSystemChange(restoresTopology: Bool) {
+        AppLog.recovery.debug("recovery pass restoresTopology=\(restoresTopology, privacy: .public)")
         displayController.refreshDisplays()
         guard !displayController.displays.isEmpty else { return }
         displayController.captureSessionState()
@@ -335,6 +360,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modeController.refresh(for: displayController.selectedDisplayID)
         framebufferController.refresh(for: displayController.selectedDisplayID)
         colorProfileController.refresh(for: displayController.selectedDisplayID)
+    }
+
+    /// WindowServer can replace the app's transfer table while a login
+    /// session settles, so the saved adjustments are rewritten from the
+    /// stable baseline whenever the installed table no longer matches what
+    /// this process wrote. Returns true when a repair was needed.
+    private func repairDriftedApplicationEffects() -> Bool {
+        guard !displayController.displays.isEmpty else { return false }
+        return displayController.repairDriftedAdjustments()
     }
 
     private func restoreProcessEffectsOnce() {

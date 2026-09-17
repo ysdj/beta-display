@@ -68,17 +68,26 @@ enum BetaDisplayLiveLUTTest {
         }
 
         var recoveryPasses = 0
-        coordinator = DisplayRecoveryCoordinator { _ in
-            recoveryPasses += 1
-            firstController.refreshDisplays()
-            _ = firstController.applySavedAdjustmentsAfterSystemChange()
-        }
+        var repairPasses = 0
+        coordinator = DisplayRecoveryCoordinator(
+            recover: { _ in
+                recoveryPasses += 1
+                firstController.refreshDisplays()
+                _ = firstController.applySavedAdjustmentsAfterSystemChange()
+            },
+            verify: {
+                let repaired = firstController.repairDriftedAdjustments()
+                if repaired { repairPasses += 1 }
+                return repaired
+            }
+        )
 
         guard let coordinator else {
             failures.append("could not create the display recovery coordinator")
             return failures
         }
         coordinator.start()
+        coordinator.startIntegrityWatch()
 
         if let originalMode,
            let alternateMode = alternateMode(for: displayID, excluding: originalMode) {
@@ -127,7 +136,6 @@ enum BetaDisplayLiveLUTTest {
             coordinator.handlePowerSourceChange()
         }
         RunLoop.current.run(until: Date().addingTimeInterval(6.2))
-        coordinator.stop()
         if recoveryPasses < 4 {
             failures.append("power-source transition produced only \(recoveryPasses) recovery passes")
         }
@@ -137,6 +145,35 @@ enum BetaDisplayLiveLUTTest {
             expected: expected,
             failures: &failures
         )
+
+        // A settling login session (or any other writer) can replace the
+        // transfer table without delivering a single notification. The
+        // integrity watch must notice and repair that on its own. This runs
+        // while the coordinator is still started.
+        let repairsBeforeSilentReset = repairPasses
+        if write(baseline, to: displayID) != .success {
+            failures.append("could not simulate a silent transfer-table reset")
+        }
+        let silentResetDeadline = Date().addingTimeInterval(
+            DisplayLUTIntegrity.steadyVerificationInterval + 3
+        )
+        while Date() < silentResetDeadline {
+            if let installed = readCurrentLUT(for: displayID),
+               installed.approximatelyMatches(expected, tolerance: matchTolerance) {
+                break
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        if repairPasses == repairsBeforeSilentReset {
+            failures.append("the integrity watch did not repair a silent transfer-table reset")
+        }
+        verify(
+            stage: "silent reset recovery",
+            displayID: displayID,
+            expected: expected,
+            failures: &failures
+        )
+        coordinator.stop()
 
         // A second controller models a fresh process after an unclean exit.
         // It must load the persisted clean baseline rather than the currently
