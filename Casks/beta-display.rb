@@ -1,9 +1,9 @@
 cask "beta-display" do
   arch arm: "arm64", intel: "x86_64"
 
-  version "1.1.14"
-  sha256 arm:   "ba1b7c1afe1ac36baa346725b0447b2955ac3b76f09a169a697182b4ce50e697",
-         intel: "0954262e0af616d4384974cc6b668310c9ed3880876decbb11a17c313f4dace0"
+  version "1.1.15"
+  sha256 arm:   "eff5ba59981e4f13a8bc9188ddf0374b0a540beadb4e004bf56eb7656e033281",
+         intel: "c715e304ae7bbd390911e50f2444caba4ae9dd24813656db1886275de82fdc7b"
 
   url "https://github.com/ysdj/beta-display/releases/download/v#{version}/BetaDisplay-#{version}-#{arch}.zip"
   name "Beta Display"
