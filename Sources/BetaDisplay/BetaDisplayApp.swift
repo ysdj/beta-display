@@ -128,8 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         launchAtLoginController.synchronize(with: preferences.launchAtLogin)
         let loginItemStatus = launchAtLoginController.status.diagnosticName
+        let launchOrigin = LaunchOrigin.current
         AppLog.launch.notice(
-            "Beta Display \(Bundle.main.betaDisplayVersion, privacy: .public) build \(Bundle.main.betaDisplayBuild, privacy: .public) started; launch at login \(loginItemStatus, privacy: .public)"
+            "Beta Display \(Bundle.main.betaDisplayVersion, privacy: .public) build \(Bundle.main.betaDisplayBuild, privacy: .public) started by \(launchOrigin.diagnosticName, privacy: .public) (\(LaunchOrigin.currentDiagnostic, privacy: .public)); launch at login \(loginItemStatus, privacy: .public)"
         )
         updateStatusItemVisibility()
         modeController.onModeApplied = { [weak self] in
@@ -144,7 +145,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // instead of trusting the single startup write.
         displayRecoveryCoordinator.startIntegrityWatch()
         displayRecoveryCoordinator.verifyApplicationEffects()
-        showSettings(nil)
+        if shouldShowSettingsWindow(launchOrigin: launchOrigin) {
+            showSettings(nil)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -154,12 +157,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
         displayRecoveryCoordinator.stop()
+        configurationStore.flushPendingChanges()
         restoreProcessEffectsOnce()
         singleInstanceController.release()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         displayRecoveryCoordinator.stop()
+        configurationStore.flushPendingChanges()
         restoreProcessEffectsOnce()
         return .terminateNow
     }
@@ -381,6 +386,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modeController.refresh(for: displayController.selectedDisplayID)
         framebufferController.refresh(for: displayController.selectedDisplayID)
         colorProfileController.refresh(for: displayController.selectedDisplayID)
+    }
+
+    /// A login-item start belongs to the menu bar. Opening the settings window
+    /// while the user is logging in steals focus from whatever they are doing,
+    /// so the app stays in the background and reaches the user through the
+    /// menu-bar item. Opening the app again (Dock, Finder, or Spotlight) is a
+    /// user start and still shows the window.
+    private func shouldShowSettingsWindow(launchOrigin: LaunchOrigin.Source) -> Bool {
+        launchOrigin != .loginItem
     }
 
     /// WindowServer can replace the app's transfer table while a login

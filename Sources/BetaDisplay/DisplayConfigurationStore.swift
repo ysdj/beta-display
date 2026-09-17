@@ -81,6 +81,10 @@ final class DisplayConfigurationStore {
     private let defaults: UserDefaults
     private let storageKey = "BetaDisplay.displayConfiguration"
     private var configurations: [String: PersistedDisplayConfiguration]
+    /// Written values reach the preferences daemon asynchronously. The app
+    /// flushes at termination so a drag that is still in flight when the
+    /// process stops is not lost.
+    private var hasPendingChanges = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -109,14 +113,33 @@ final class DisplayConfigurationStore {
         _ change: (inout PersistedDisplayConfiguration) -> Void
     ) {
         guard let key = DisplayIdentity.key(for: displayID) else { return }
+        update(forDisplayKey: key, change)
+    }
+
+    /// Key-based update, which also lets the self-test cover persistence
+    /// without depending on an attached display.
+    func update(
+        forDisplayKey key: String,
+        _ change: (inout PersistedDisplayConfiguration) -> Void
+    ) {
         var configuration = configurations[key] ?? PersistedDisplayConfiguration()
         change(&configuration)
         configurations[key] = configuration
         save()
     }
 
+    /// Writes the pending configuration to disk. Flushing the standard
+    /// defaults also persists the display groups and login preferences, which
+    /// live in the same domain.
+    func flushPendingChanges() {
+        guard hasPendingChanges else { return }
+        hasPendingChanges = false
+        defaults.synchronize()
+    }
+
     private func save() {
         guard let data = try? JSONEncoder().encode(configurations) else { return }
         defaults.set(data, forKey: storageKey)
+        hasPendingChanges = true
     }
 }

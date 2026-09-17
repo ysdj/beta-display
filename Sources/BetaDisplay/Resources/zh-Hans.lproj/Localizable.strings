@@ -241,3 +241,5 @@
 "self_test.version_comparison" = "更新版本比较失败";
 "self_test.resolution_not_locked" = "显示恢复错误地尝试还原外部更改的分辨率";
 "self_test.instance_lock" = "单实例锁或激活请求接力失败";
+"self_test.launch_origin" = "启动来源检测失败";
+"self_test.configuration" = "待写入的显示器配置未能落盘";

@@ -1,3 +1,4 @@
+import Carbon
 import CoreGraphics
 import Foundation
 
@@ -284,6 +285,42 @@ enum BetaDisplaySelfTest {
         } else {
             failures.append(L10n.text("self_test.lut"))
         }
+        // A login-item start must be recognized from either spelling of the
+        // launch event, and a normal start must never be mistaken for one:
+        // only the login-item case suppresses the settings window.
+        if LaunchOrigin.source(loginItemFlag: true, propertyDataCode: nil) != .loginItem
+            || LaunchOrigin.source(
+                loginItemFlag: nil,
+                propertyDataCode: keyAELaunchedAsLogInItem
+            ) != .loginItem
+            || LaunchOrigin.source(loginItemFlag: false, propertyDataCode: nil) != .user
+            || LaunchOrigin.source(
+                loginItemFlag: nil,
+                propertyDataCode: keyAEPropData
+            ) != .user
+            || LaunchOrigin.source(loginItemFlag: nil, propertyDataCode: nil) != .user {
+            failures.append(L10n.text("self_test.launch_origin"))
+        }
+
+        // Preferences written by a slider drag must survive an abrupt stop:
+        // the store flushes pending changes at termination.
+        let configurationSuite = "BetaDisplay.self-test.config.\(UUID().uuidString)"
+        if let defaults = UserDefaults(suiteName: configurationSuite) {
+            defer { defaults.removePersistentDomain(forName: configurationSuite) }
+            var persisted = ColorAdjustments.neutral
+            persisted.redGain = 0.2
+            let displayKey = "self-test-display"
+            let writer = DisplayConfigurationStore(defaults: defaults)
+            writer.update(forDisplayKey: displayKey) { $0.adjustments = persisted }
+            writer.flushPendingChanges()
+            let reader = DisplayConfigurationStore(defaults: defaults)
+            if reader.configuration(forDisplayKey: displayKey)?.adjustments != persisted {
+                failures.append(L10n.text("self_test.configuration"))
+            }
+        } else {
+            failures.append(L10n.text("self_test.configuration"))
+        }
+
         let group = DisplayGroup(name: "self-test", displayKeys: ["one", "two"])
         if group.name != "self-test" || group.displayKeys != ["one", "two"] {
             failures.append(L10n.text("self_test.group"))

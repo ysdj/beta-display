@@ -12,6 +12,7 @@ expected_marker="beta-display-lut-integrity-guard-v4"
 deployment_lock_directory=""
 deployment_lock_owner_file=""
 deployment_lock_held=false
+deployment_step="initialization"
 stale_lock_directory=""
 staging_app=""
 backup_app=""
@@ -77,7 +78,13 @@ require_gate() {
     local version="$2"
     local build="$3"
     local output
-    output=$("$app/Contents/MacOS/BetaDisplay" --deployment-gate)
+    # The `if !` form keeps the caller's errexit from turning a non-zero gate
+    # exit into a silent abort; the reason has to reach the operator.
+    if ! output=$("$app/Contents/MacOS/BetaDisplay" --deployment-gate); then
+        print -u2 -- "Deployment gate could not run for $app (exit status $?)"
+        print -u2 -- "Output:   $output"
+        exit 1
+    fi
     local expected="BetaDisplay deployment-gate $expected_marker $version $build"
     [[ "$output" == "$expected" ]] || {
         print -u2 -- "Deployment gate mismatch for $app"
@@ -90,7 +97,12 @@ require_gate() {
 require_self_test() {
     local app="$1"
     local output
-    output=$("$app/Contents/MacOS/BetaDisplay" --self-test)
+    # As above: report a failing self-test instead of aborting silently.
+    if ! output=$("$app/Contents/MacOS/BetaDisplay" --self-test); then
+        print -u2 -- "Self-test failed for $app (exit status $?)"
+        print -u2 -- "$output"
+        exit 1
+    fi
     [[ "$output" == "Beta Display self-test passed" ]] || {
         print -u2 -- "Self-test failed for $app"
         print -u2 -- "$output"
@@ -260,14 +272,31 @@ recover_interrupted_deployment_if_needed() {
     print -u2 -- "Restored interrupted deployment backup: $target_app"
 }
 
+app_diagnostics_dump() {
+    # A launch that disappears without a message is otherwise undebuggable;
+    # the app logs its startup and recovery decisions to the unified log.
+    local lines
+    lines=$(log show --style compact --last 2m --predicate 'subsystem == "io.github.ysdj.betadisplay"' 2>/dev/null | tail -n 12)
+    if [[ -n "$lines" ]]; then
+        print -u2 -- "Recent Beta Display log entries:"
+        print -u2 -- "$lines"
+    else
+        print -u2 -- "No recent Beta Display log entries were found."
+    fi
+    return 0
+}
+
 terminate_launched_process_for_rollback() {
     [[ -n "$launched_pid" ]] || return 0
     kill -0 "$launched_pid" 2>/dev/null || return 0
     osascript -e 'tell application id "io.github.ysdj.betadisplay" to quit' || true
-    for _ in {1..50}; do
+    # The quit path restores the display state it observed, which can take
+    # longer than a moment on a busy system, so allow 15 seconds.
+    for _ in {1..150}; do
         kill -0 "$launched_pid" 2>/dev/null || return 0
         sleep 0.1
     done
+    app_diagnostics_dump
     return 1
 }
 
@@ -309,6 +338,9 @@ cleanup_on_exit() {
     local exit_status=$?
     trap - EXIT
     set +e
+    if (( exit_status != 0 )) && [[ "$deployment_succeeded" != true ]]; then
+        print -u2 -- "Deployment aborted during: $deployment_step (exit status $exit_status)"
+    fi
     rollback_install
     release_deployment_lock
     exit "$exit_status"
@@ -326,6 +358,7 @@ if [[ -z "$source_app" ]]; then
 fi
 source_app=${source_app:A}
 
+deployment_step="verifying the source app"
 require_app "$source_app"
 codesign --verify --deep --strict --verbose=2 "$source_app"
 source_id=$(plist_value "$source_app" CFBundleIdentifier)
@@ -355,14 +388,20 @@ if [[ -e "$target_app/Contents/Info.plist" ]]; then
 fi
 
 # Request normal application termination first so its LUT/session restore runs.
+deployment_step="quitting the installed app"
 old_processes=$(running_beta_display_processes)
 if [[ -n "$old_processes" ]]; then
     osascript -e 'tell application id "io.github.ysdj.betadisplay" to quit' || true
-    for _ in {1..50}; do
+    # A normal quit restores transfer tables, layout, profiles, and hardware
+    # brightness first, so a busy system can need more than a few seconds.
+    for _ in {1..150}; do
         active_old_processes=""
         while IFS=$'\t' read -r old_pid old_path; do
             [[ -z "$old_pid" ]] && continue
-            current_path=$(ps -p "$old_pid" -o comm= 2>/dev/null | sed 's/^[[:space:]]*//')
+            # `ps` exits non-zero once the process is gone. Without the
+            # trailing `|| true`, `set -o pipefail` plus `set -e` turned that
+            # expected result into a silent abort of the whole deployment.
+            current_path=$(ps -p "$old_pid" -o comm= 2>/dev/null | sed 's/^[[:space:]]*//' || true)
             [[ "$current_path" == "$old_path" ]] && active_old_processes+="$old_pid"$'\n'
         done <<< "$old_processes"
         [[ -z "$active_old_processes" ]] && break
@@ -370,7 +409,8 @@ if [[ -n "$old_processes" ]]; then
     done
 fi
 [[ -z "${active_old_processes:-}" ]] || {
-    print -u2 -- "Beta Display did not exit gracefully; refusing installation"
+    print -u2 -- "Beta Display did not exit gracefully within 15 seconds; refusing installation"
+    app_diagnostics_dump
     exit 1
 }
 
@@ -379,6 +419,7 @@ deployment_nonce="$$-$RANDOM"
 staging_app="$target_parent/.Beta Display.deploying-$deployment_nonce.app"
 backup_app="$target_parent/.Beta Display.previous-$deployment_nonce.app"
 
+deployment_step="staging the new app"
 remove_owned_path "$staging_app" '.Beta Display.deploying-*.app'
 ditto "$source_app" "$staging_app"
 require_app "$staging_app"
@@ -408,6 +449,7 @@ stage_sha256=$(app_sha256 "$staging_app")
     print -u2 -- "Beta Display restarted before replacement; refusing installation"
     exit 1
 }
+deployment_step="installing the new app"
 if [[ -e "$target_app" ]]; then
     # Arm recovery before the move: a signal between `mv` and state assignment
     # must still put the previous bundle back.
@@ -426,6 +468,7 @@ if ! mv -- "$staging_app" "$target_app"; then
 fi
 install_committed=true
 
+deployment_step="verifying the installed app"
 require_app "$target_app"
 codesign --verify --deep --strict --verbose=2 "$target_app"
 installed_id=$(plist_value "$target_app" CFBundleIdentifier)
@@ -446,18 +489,25 @@ installed_sha256=$(app_sha256 "$target_app")
 # Start the already-verified executable without the deployment terminal as its
 # parent. `nohup` keeps a shell HUP from terminating it; its executable path is
 # then checked directly against the installed target.
+deployment_step="launching the installed app"
 /usr/bin/nohup "$target_app/Contents/MacOS/BetaDisplay" </dev/null >/dev/null 2>&1 &
 launched_pid=$!
-for _ in {1..50}; do
-    installed_pid=$(ps -p "$launched_pid" -o pid= 2>/dev/null | tr -d '[:space:]')
+# Gatekeeper assessment and login-item bookkeeping can delay the first
+# process image on a cold launch, so allow 15 seconds before declaring
+# failure.
+for _ in {1..150}; do
+    # A missing process here is a reported failure, not an abort: `ps`
+    # returning non-zero must not trip errexit through pipefail.
+    installed_pid=$(ps -p "$launched_pid" -o pid= 2>/dev/null | tr -d '[:space:]' || true)
     [[ -n "$installed_pid" ]] && break
     sleep 0.1
 done
 [[ -n "${installed_pid:-}" ]] || {
-    print -u2 -- "Installed Beta Display did not launch"
+    print -u2 -- "Installed Beta Display did not launch within 15 seconds"
+    app_diagnostics_dump
     exit 1
 }
-running_command=$(ps -p "$installed_pid" -o comm= | sed 's/^[[:space:]]*//')
+running_command=$(ps -p "$installed_pid" -o comm= 2>/dev/null | sed 's/^[[:space:]]*//' || true)
 [[ "$running_command" == "$target_app/Contents/MacOS/BetaDisplay" ]] || {
     print -u2 -- "Launched process does not match the installed app"
     exit 1
@@ -468,13 +518,15 @@ running_command=$(ps -p "$installed_pid" -o comm= | sed 's/^[[:space:]]*//')
 sleep 1
 kill -0 "$installed_pid" 2>/dev/null || {
     print -u2 -- "Installed Beta Display exited immediately after launch"
+    app_diagnostics_dump
     exit 1
 }
-running_command=$(ps -p "$installed_pid" -o comm= | sed 's/^[[:space:]]*//')
+running_command=$(ps -p "$installed_pid" -o comm= 2>/dev/null | sed 's/^[[:space:]]*//' || true)
 [[ "$running_command" == "$target_app/Contents/MacOS/BetaDisplay" ]] || {
     print -u2 -- "Launched process path changed before deployment completed"
     exit 1
 }
+deployment_step="confirming the launched app"
 # A successful deployment is committed before backup cleanup. If a signal
 # interrupts cleanup, retaining a backup is safe; deleting the new target is
 # not.

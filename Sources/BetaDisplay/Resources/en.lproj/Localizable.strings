@@ -241,3 +241,5 @@
 "self_test.version_comparison" = "Update version comparison failed";
 "self_test.resolution_not_locked" = "Display recovery attempted to restore an externally changed resolution";
 "self_test.instance_lock" = "Single-instance locking or the activation request handshake failed";
+"self_test.launch_origin" = "Launch-origin detection failed";
+"self_test.configuration" = "Pending display configuration was not flushed";

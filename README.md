@@ -45,7 +45,7 @@ brew install --cask beta-display
 - Copyable display diagnostics
 
 Controls appear only when macOS and the selected display expose the required capability. Resolution, layout, mirroring, and image changes affect the display immediately.
-On a normal quit, Beta Display restores the display-system state that it observed before this run: resolution and refresh rate, layout and mirroring, hardware brightness, ColorSync profile, transfer tables, framebuffer controls, Night Shift, and True Tone. Saved Beta Display controls are active only while the app is running.
+On a normal quit, Beta Display restores the display-system state that it observed before this run: resolution and refresh rate, layout and mirroring, hardware brightness, ColorSync profile, transfer tables, framebuffer controls, Night Shift, and True Tone. Saved Beta Display controls are active only while the app is running. An automatic start at login applies the saved adjustments in the background without opening the settings window; reopen the app or use the menu-bar item to change settings.
 App-only transfer-table and framebuffer adjustments are reapplied after wake, display-mode changes, and main-display handoffs. While the app owns a transfer table it also verifies it and rewrites it from the stable baseline as soon as macOS or another process replaces it, so a saved RGB gain is in effect within seconds of an automatic start at login and cannot be lost by a reset that arrives without a notification. macOS-owned settings are synchronized for display in the app but are not locked or written back automatically.
 
 ## Updates
@@ -140,7 +140,7 @@ brew install --cask beta-display
 - 查看并复制显示器诊断信息
 
 部分控制项只会在 macOS 和当前显示器公开相应能力时出现。更改分辨率、布局、镜像或图像参数会立即影响显示输出。
-正常退出时，Beta Display 会还原本次运行前观察到的 macOS 显示状态：分辨率和刷新率、排列与镜像、硬件亮度、ColorSync 描述文件、传输表、帧缓冲控制、Night Shift 与原彩显示。已保存的 Beta Display 控制仅在应用运行期间生效。
+正常退出时，Beta Display 会还原本次运行前观察到的 macOS 显示状态：分辨率和刷新率、排列与镜像、硬件亮度、ColorSync 描述文件、传输表、帧缓冲控制、Night Shift 与原彩显示。已保存的 Beta Display 控制仅在应用运行期间生效。登录自动启动时会在后台应用已保存的设置，不弹出设置窗口；需要修改设置时请再次打开应用或使用菜单栏图标。
 唤醒、显示模式变化或主显示器切换后，Beta Display 会重新应用应用专属的传输表和帧缓冲调整。应用持有传输表期间还会持续校验：一旦 macOS 或其他进程替换了它，就会从稳定的基准表重新写入，因此登录时自动启动后几秒内保存的 RGB 增益即可生效，也不会因为没有任何通知的重置而丢失。macOS 自有设置只同步显示，不会被锁定或自动写回。
 
 ## 检查更新
